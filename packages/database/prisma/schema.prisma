@@ -1,6 +1,6 @@
-// NYSC Ekiti Digital Platform — Prisma Schema (Phase 0 foundation)
-// Detailed models will be expanded in Phases 2–4.
-// PCM remains the central aggregate root.
+// NYSC Ekiti Digital Platform — Prisma Schema
+// Phase 2: Identity + Dynamic RBAC + Audit
+// PCM remains the central aggregate (expanded in Phases 3–6).
 
 generator client {
   provider = "prisma-client-js"
@@ -11,20 +11,131 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Placeholder models — expanded in later phases.
-// Do not treat these as final.
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
   passwordHash String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  phone        String?
+  /// Grade Level (GL) as used in NYSC secretariat
+  gradeLevel   String?
+  rank         String?
+  post         String?
+  /// Optional geographic scope keys (e.g. LGA code, zone code)
+  lgaCode      String?
+  zoneCode     String?
+  isActive     Boolean   @default(true)
+  /// Activation for officer self-service profile completion
+  activationToken   String?
+  activationSentAt  DateTime?
+  activatedAt       DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  // Relations to be expanded: roles, audit events, etc.
+  roles        UserRole[]
+  auditLogs    AuditLog[] @relation("AuditActor")
+  refreshTokens RefreshToken[]
+
+  @@index([lgaCode])
+  @@index([zoneCode])
+  @@index([isActive])
 }
 
-// Further models (Pcm, Role, Permission, Hostel, Bed, AuditLog, etc.)
-// will be introduced with proper relations when Phase 2–4 begins.
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic RBAC
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false) // e.g. Super Admin — cannot delete
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  /// resource:action e.g. "pcm:read", "file:forward"
+  key         String   @unique
+  description String?
+  module      String?  // grouping for admin UI
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  /// Optional extra scope override JSON (future)
+  scopeJson  String?
+  assignedAt DateTime @default(now())
+  assignedBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  actorId         String?
+  actor           User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail      String?
+  actorRoleAtTime String?  // comma-separated role names at time of action
+  action          String   // e.g. user.create, role.assign, pcm.update
+  entityType      String?
+  entityId        String?
+  pcmId           String?  // when action affects a corps member
+  beforeJson      String?  // JSON snapshot
+  afterJson       String?
+  ip              String?
+  userAgent       String?
+  sessionId       String?
+  createdAt       DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([pcmId])
+  @@index([action])
+  @@index([createdAt])
+}

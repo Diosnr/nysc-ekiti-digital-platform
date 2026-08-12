@@ -1,23 +1,20 @@
 import type { NextConfig } from "next";
 
 /**
- * Static export for GitHub Pages.
- * Project site URL: https://diosnr.github.io/nysc-ekiti-digital-platform/
- *
- * basePath / assetPrefix are only applied when building for Pages
- * (GITHUB_PAGES=true). Local `next dev` and normal builds stay at root.
+ * Static export only when building for GitHub Pages (GITHUB_PAGES=true).
+ * Normal / staff / API mode uses the standard Next.js server runtime.
  */
 const isGithubPages = process.env.GITHUB_PAGES === "true";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: "export",
-  trailingSlash: true,
   images: {
     unoptimized: true,
   },
   ...(isGithubPages
     ? {
+        output: "export" as const,
+        trailingSlash: true,
         basePath: "/nysc-ekiti-digital-platform",
         assetPrefix: "/nysc-ekiti-digital-platform",
       }

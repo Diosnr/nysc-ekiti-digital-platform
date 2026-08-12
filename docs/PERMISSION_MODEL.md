@@ -1,4 +1,4 @@
-# Permission Model Outline — Dynamic RBAC
+# Permission Model — Dynamic RBAC
 
 ## Principles
 
@@ -6,55 +6,51 @@
 2. Super Admin can create, rename, deactivate roles and map any set of permissions.
 3. Menu visibility is driven by permissions but is **not** a security boundary.
 4. Every protected API endpoint / service method must check the required permission(s).
-5. Permissions are fine-grained (`resource:action` or `resource:action:scope`).
+5. Permissions are fine-grained (`resource:action`).
+6. Geographic scope (LGA / zone) is enforced in addition to permissions for LGI and ZI.
 
-## Suggested Permission Vocabulary (extensible)
-
-Examples (not exhaustive):
+## Permission catalog (seeded)
 
 ### Identity & Admin
-- `user:read`, `user:create`, `user:update`, `user:deactivate`
-- `role:read`, `role:create`, `role:update`, `role:assign`
-- `permission:manage`
-- `audit:read`
+`user:read` `user:create` `user:update` `user:deactivate`  
+`role:read` `role:create` `role:update` `role:assign`  
+`permission:manage` `audit:read`
 
-### PCM Core
-- `pcm:read`, `pcm:create`, `pcm:update`, `pcm:search`
-- `pcm:verify` (intake)
-- `pcm:photo:view`
+### PCM
+`pcm:read` `pcm:create` `pcm:update` `pcm:search` `pcm:verify` `pcm:photo:view`
 
-### Camp Operations
-- `security:checkin`
-- `accommodation:read`, `accommodation:assign`, `accommodation:change`
-- `hostel:manage`
-- `registration:complete`
-- `bank:register`, `bank:update`
-- `platoon:assign`, `platoon:manage`
-- `kit:issue`, `kit:view`
-- `camp-exit:request`, `camp-exit:approve-platoon`, `camp-exit:approve-director`, `camp-exit:approve-coordinator`
+### Camp
+`security:checkin` `accommodation:read` `accommodation:assign` `accommodation:change`  
+`hostel:manage` `registration:complete` `bank:register` `bank:update`  
+`platoon:assign` `platoon:manage` `platoon:attendance` `kit:issue` `kit:view`  
+`camp:exeat` `camp:clinic` `camp:export`
 
-### Service Year
-- `ppa:manage`, `relocation:manage`, `leave:manage`, `clearance:manage`
+### Electronic file movement
+`file:read` `file:create` `file:minute` `file:forward` `file:return` `file:reject` `file:approve` `file:registry`
 
-### Content
-- `news:manage`, `announcement:manage`, `event:manage`, `gallery:manage`, `faq:manage`, `resource:manage`
+### Service year
+`ppa:manage` `relocation:manage` `leave:manage` `clearance:manage`
 
-### Reports
-- `report:view`, `report:export`, `dashboard:view`
+### Content & reports
+`news:manage` `announcement:manage` `event:manage` `gallery:manage` `faq:manage` `resource:manage`  
+`report:view` `report:export` `dashboard:view`
 
-## Role Examples (configurable, not code constants)
+## Starter roles (seeded, permissions assigned by Super Admin except Super Admin itself)
 
-- Super Admin → all permissions
-- State Coordinator → broad operational + approval permissions
-- Camp Director → camp oversight + certain approvals
-- Security Officer → `security:checkin`, `pcm:photo:view`, limited `pcm:read`
-- Accommodation Officer → accommodation + hostel permissions
-- etc.
-
-Super Admin can invent new roles (e.g. "Camp Documentation Supervisor") and map exactly the permissions required.
+- Super Admin (system, all permissions)
+- State Coordinator
+- Camp Director
+- Security Officer
+- Registration Officer
+- Accommodation Officer
+- Platoon Officer
+- LGI
+- Zonal Inspector
+- Head CIM
+- Registry Officer
 
 ## Enforcement
 
-- Backend guards / middleware / decorators check permissions on every request.
-- Frontend uses the same permission set only for UI decisions (show/hide).
-- Audit log records the role(s) the actor held at the time of the action.
+- Use `@nysc/auth` → `hasPermission(granted, required)` on the server.
+- Audit log stores `actorRoleAtTime` at the moment of the action.
+- Frontend may hide menus based on permissions; that does **not** protect APIs.
