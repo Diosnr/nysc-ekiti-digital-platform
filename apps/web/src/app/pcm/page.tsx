@@ -1,46 +1,37 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PageHero } from "@/components/PageHero";
+import { PcmIntakeClient } from "@/components/PcmIntakeClient";
 
 export const metadata: Metadata = {
-  title: "PCM Services",
+  title: "PCM Registration",
+  description: "Prospective Corps Member intake for NYSC Ekiti — scan your call-up QR or enter details.",
 };
 
-export default function PcmServicesPage() {
+export default function PcmSelfServicePage() {
   return (
-    <>
-      <PageHero
-        breadcrumb="PCM / Corps Member Services"
-        title="PCM & Corps Member Services"
-        subtitle="Self-service entry points for Prospective Corps Members and serving Corps Members. Features are introduced progressively."
-      />
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
-        <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Coming in phases</h2>
-          <p className="mt-3 text-slate-600 leading-relaxed">
-            Digital intake (including QR-based call-up verification), camp-related self-service,
-            and later service-year workflows (PPA, relocation, clearance, etc.) will be rolled out
-            according to the platform roadmap. The system is modelled around your Corps Member
-            record — not around uploading random files.
-          </p>
-          <ul className="mt-6 space-y-2 text-sm text-slate-600">
-            <li>• Phase 3 — PCM intake & verification</li>
-            <li>• Phase 4 — Camp operations (check-in, accommodation, registration, kits, …)</li>
-            <li>• Phase 6 — Service-year operations</li>
-          </ul>
-          <p className="mt-6 text-sm text-slate-500">
-            Meanwhile, use{" "}
-            <Link href="/orientation-camp" className="font-medium text-nysc-green hover:underline">
-              Orientation Camp
-            </Link>{" "}
-            and{" "}
-            <Link href="/announcements" className="font-medium text-nysc-green hover:underline">
-              Announcements
-            </Link>{" "}
-            for official guidance.
-          </p>
-        </div>
+    <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
+      <p className="text-sm font-semibold uppercase tracking-wider text-nysc-green">
+        Prospective Corps Members
+      </p>
+      <h1 className="mt-2 text-3xl font-bold text-slate-900">Ekiti intake registration</h1>
+      <p className="mt-3 max-w-2xl text-slate-600">
+        Scan the QR code on your NYSC call-up letter or enter your details. This process stays on the
+        NYSC Ekiti platform — you are not redirected away as part of the normal flow.
+      </p>
+
+      <div className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <PcmIntakeClient />
       </div>
-    </>
+
+      <p className="mt-8 text-center text-sm text-slate-500">
+        <Link href="/" className="text-nysc-green hover:underline">
+          Back to NYSC Ekiti home
+        </Link>
+        {" · "}
+        <Link href="/orientation-camp" className="text-nysc-green hover:underline">
+          Orientation camp info
+        </Link>
+      </p>
+    </main>
   );
 }

@@ -1,30 +1,32 @@
 # Phase 3 — PCM Intake
 
+## Product placement (corrected)
+
+- **Self-service:** `/pcm` — Prospective Corps Members scan QR or enter details (public).
+- **Staff-assisted:** `/staff/pcm` — registry, search, manual intake for officials.
+- QR / live verification is a **product feature**, not blocked. Remote HTTP fetch is **config-gated** (`VERIFICATION_ADAPTER` / `VERIFICATION_ALLOW_REMOTE`) because authorization against NYSC endpoints is an external dependency — the scan UX and intake path remain available with completion/manual fallback.
+
 ## Completed
 
-- [x] Source of Truth: full Camp Portal staff modules (Registration, Security in/out, Camp Director, Clinic, exit chain)
-- [x] Prisma `Pcm` + `VerificationRecord` + lifecycle status enum
-- [x] Verification adapter (manual + unauthorized remote placeholder)
-- [x] `POST /api/pcm/intake` — manual intake, duplicate detection, audit
-- [x] `GET /api/pcm` — search with LGA/zone scope
-- [x] `GET /api/pcm/[id]` — detail with scope
-- [x] Staff UI: `/staff/pcm` registry + manual intake form
-- [x] Staff UI: `/staff/pcm/[id]` detail
-- [x] Nav link PCM Registry
+- [x] `Pcm` + `VerificationRecord` models
+- [x] Verification adapter: manual + QR payload (+ optional remote when configured)
+- [x] `POST /api/pcm/intake` supports public self-service and staff
+- [x] `/pcm` self-service page with camera QR path + paste + manual form
+- [x] Staff registry UI
+- [x] Header link: PCM Registration
 
-## After migrate
+## Config
 
-```bash
-cd packages/database
-npx prisma migrate dev --name phase3_pcm
+```env
+# default: QR works; remote page fetch off until authorized
+VERIFICATION_ADAPTER=manual
+# when stakeholders approve remote verification against NYSC:
+# VERIFICATION_ADAPTER=official_api
+# VERIFICATION_ALLOW_REMOTE=true
 ```
 
-Ensure Super Admin (or intake role) has `pcm:create` / `pcm:verify` / `pcm:read`.
+## Next
 
-## Deferred (by design)
-
-- [ ] Live QR camera UI + authorized remote verification (needs stakeholder authorization)
-- [ ] Self-service PCM onboarding portal page
-- [ ] Photograph upload storage pipeline
-
-## Next: Phase 4 — Camp Operations (security check-in, accommodation, …)
+- Wire a barcode/QR decoding library on the live camera stream (BarcodeDetector / html5-qrcode)
+- Official field mapper once NYSC response shape is confirmed
+- Phase 4 Camp Operations
