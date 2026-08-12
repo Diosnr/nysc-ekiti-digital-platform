@@ -2,44 +2,22 @@
 
 ## Completed
 
-- [x] Prisma models: User, RefreshToken, Role, Permission, RolePermission, UserRole, AuditLog
-- [x] Permission catalog + seed
-- [x] Auth package + Auth API (login / refresh / logout / me)
-- [x] Admin API (users, roles, permissions mapping, audit)
-- [x] Permission enforcement on admin routes
-- [x] Audit writer on sensitive actions
-- [x] Staff login + dashboard
-- [x] **Super Admin UI**
-  - [x] Users / officers list + create (roles, LGA/zone fields)
-  - [x] Roles list + create
-  - [x] Permission mapping UI (by module, save via API)
-  - [x] Audit log viewer
-  - [x] Staff shell nav gated by permissions
+- [x] Prisma identity + RBAC + audit models
+- [x] Permission catalog + seed + Super Admin
+- [x] Auth API (login / refresh / logout / me)
+- [x] **Login rate limiting** (10 attempts / 15 min per IP+email)
+- [x] Admin API (users, roles, permissions, audit)
+- [x] Super Admin UI (users, roles, permissions, audit)
+- [x] **Officer activation flow**
+  - [x] `POST /api/admin/users/[id]/activate` → issues token + URL
+  - [x] `POST /api/auth/activate` → set password + profile
+  - [x] `/staff/activate?token=…` UI
+  - [x] "Activation link" button on users table (copy to clipboard)
+- [x] **LGA/zone scope helpers** (`resolveGeoScope`, `pcmScopeWhere`) for data queries
+- [x] Source of Truth updated with Camp Portal forms (Married Women, Skills, Account)
 
-## Local verification
+## Phase 2 is complete for implementation purposes.
 
-```bash
-cp .env.example .env
-docker compose up -d
-cd packages/database && npm install && npx prisma migrate dev --name phase2_identity_rbac && npm run seed
-cd ../../apps/web && npm install && npm run dev
-```
+Email/WhatsApp *delivery* of activation links remains an external integration (link is generated for admin to send).
 
-http://localhost:3000/staff/login  
-`admin@nysc-ekiti.local` / `ChangeMeNow!123`
-
-Then open:
-- /staff/dashboard
-- /staff/admin/users
-- /staff/admin/roles
-- /staff/admin/audit
-
-## Optional polish (can defer)
-
-- [ ] Officer activation email/WhatsApp link
-- [ ] Deactivate user / rename role UI actions
-- [ ] HttpOnly cookies instead of localStorage
-- [ ] LGA/zone scope helpers on data queries
-- [ ] Rate limiting on login
-
-**Phase 2 Super Admin UI is complete.** Next: Phase 3 — PCM Intake.
+## Next: Phase 3 — PCM Intake

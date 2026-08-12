@@ -6,7 +6,7 @@
 > Do not invent business rules that contradict the content below.
 
 **Last updated:** 2026-08-12  
-**Origin:** Compiled from stakeholder requirements, product direction, and the NYSC Ekiti CIS (Central Information System) briefing document (*DIGITAL FILING SYSTEM.docx*).
+**Origin:** Compiled from stakeholder requirements, product direction, the NYSC Ekiti CIS briefing (*DIGITAL FILING SYSTEM.docx*), and Camp Portal form specifications provided by stakeholders.
 
 ---
 
@@ -92,28 +92,13 @@ Every manual NYSC process that can responsibly be digitized should be evaluated 
 
 ## 3. High-Level Menu Structure (Stakeholder CIS View)
 
-Stakeholder-facing menu concepts (map to modules; do not hard-code as immutable UI):
-
 1. **Home Page**
-2. **Camp Portal**
-   - Nursing / Pregnant women (capture husband’s address for posting considerations)
-   - Skills
-   - Account (including NIN card image capture where authorized)
-   - Download Excel file (exports)
-   - Registration Committee (**staff log-in**)
-   - Security Committee — QR code scanning for coming in and going out (**staff log-in**)
-   - Camp Director — camp exeats and approvals (**staff log-in**)
-   - Camp Clinic (**staff log-in**)
-   - Platoon — daily attendance (mark present); periodic face-ID or QR attendance (e.g. once in 3 weeks) via phone/tablet
+2. **Camp Portal** (see §5 for detailed forms)
 3. **Electronic File Movement**
 4. **Admin**
-   - Upload file and update (aim to synchronize with national NIS where authorized)
-   - Upload picture file
-   - Register profiles
-   - Set permissions
 5. **Employer’s Page**
 
-Field reduction: LGA Inspectors (LGI) and Zonal Inspectors (ZI) should have phone-friendly views of relevant CIS / corps data for field use.
+Field reduction: LGI and ZI phone-friendly views of relevant corps data.
 
 ---
 
@@ -134,385 +119,173 @@ The call-up letter contains a QR code which leads to an NYSC call-up-letter veri
 
 **Critical constraints:**
 
-- The user should **NOT** be redirected away from the NYSC Ekiti platform as part of the normal workflow.
-- The QR scanner is an **intake mechanism**, not the entire product.
-- Design the NYSC verification integration behind an **abstraction / adapter** so that the rest of the system does not depend directly on NYSC's current webpage implementation.
-- Do **not** hard-code scraping logic throughout the application.
-- The verification integration must be isolated so it can later be replaced by an authorized API or another official integration without rewriting the PCM system.
-- Do **not** assume that automation against an NYSC endpoint is authorized merely because the endpoint is technically accessible. Treat authorization / integration approval as an external dependency and document it.
+- User should **NOT** be redirected away from the NYSC Ekiti platform as part of the normal workflow.
+- QR scanner is an **intake mechanism**, not the entire product.
+- Verification behind an **abstraction / adapter** (no hard-coded scraping throughout the app).
+- Authorization to automate against NYSC endpoints is an **external dependency**.
 
-Security Committee QR usage for **camp in/out** is a separate operational use of QR and should share scanner infrastructure where practical, but is not the same as call-up intake.
+Security Committee QR for **camp in/out** is separate from call-up intake but may share scanner infrastructure.
 
 ---
 
-## 5. Camp Workflow
+## 5. Camp Portal — Detailed Forms (Stakeholder Spec)
 
-The system should model the actual movement of a PCM through camp.
+Camp Portal forms are **search-by-call-up** driven: search call-up number → **name (and identity) populate automatically** from the central PCM record. Do not re-type identity fields.
 
-### Arrival / Security (Security Committee)
-PCM arrives at camp. Security verifies the PCM and records:
+### 5.1 Ekiti Married Women
 
-- Identity (including: onclick a name on a list → show the picture of the person)
-- Arrival / check-in status (simple "Mark Check-in" button)
-- Date / time (auto-stored based on the moment they are marked as checked in)
-- Relevant security / check-in information
-- QR-based scanning for coming in and going out (as specified for Security Committee)
+Form path under Camp Portal:
 
-### Accommodation
-Accommodation personnel receive the eligible PCM **only after** check-in by security / arrivals.
+1. Search call-up
+2. Name pops up automatically
+3. Are you pregnant? — Yes / No
+4. Are you nursing a baby? — Yes / No
+5. Write address of your husband
+6. Pick the state of residence
+7. Pick LGA of residence
+8. Pick community of residence
 
-They should be able to:
+Purpose includes posting considerations (husband’s address / residence). Data is stored against the PCM record (special category / married-women camp profile), not as a disconnected form dump.
 
-- See available accommodation
-- Assign hostel
-- Assign bed
-- Change allocation where authorized
-- Record accommodation status
+### 5.2 Skills
 
-**Rules:**
-- Prevent two PCMs from being assigned the same bed
-- Prevent assignment to hostels already at capacity
-- Ability to create hostels and set their bed capacity
+1. Search call-up
+2. Name pops up automatically
+3. Pick a skill from the drop-down
+4. Pick another skill
+5. Pick a 3rd skill from the drop-down
 
-### Camp Registration (Registration Committee)
-Registration personnel complete the required registration workflow on top of the existing PCM record (avoid unnecessary re-entry).
+Skills list is configurable (admin-maintained catalogue). Up to three skills per PCM for camp capture.
 
-### Account / NIN
-Support capture of account-related data and NIN card images where authorized and configured for the camp.
+### 5.3 Account (NIN card images)
 
-### Bank / Account Registration
-Configurable workflow supporting bank assignment, registration status, account-opening status, account number capture, verification status, responsible operator, timestamp, audit history.
+1. Search call-up
+2. Name pops up automatically
+3. Capture / upload NIN card images (and related account desk fields as configured)
 
-**Do NOT assume** NYSC personnel generate bank account numbers themselves. Model the bank desk as a configurable operational / partner workflow.
+Aligns with bank/account registration workflows; NIN images are sensitive — access controlled and audited.
 
-### Platoon
-Support:
+### 5.4 Other Camp Portal modules (summary)
 
-- Platoon assignment (automatic from state-code rules where applicable)
-- Platoon officers and membership
-- Daily attendance by marking present
-- Periodic attendance via phone/tablet face-ID or QR (e.g. once in three weeks) as specified by stakeholders
+- **Download Excel** — authorized exports
+- **Registration Committee** (staff) — complete registration on existing PCM record
+- **Security Committee** (staff) — QR in/out; check-in with photo on name click; mark check-in + auto timestamp
+- **Camp Director** (staff) — exeats and approvals
+- **Camp Clinic** (staff) — medical workflows where authorized
+- **Platoon** — daily attendance (mark present); periodic face-ID or QR attendance (e.g. once in 3 weeks) on phone/tablet
 
-### Kits
-After platoon assignment: view eligible PCMs, issue kits, record items/sizes/missing/replacements, track status — preferably a clear “kit issued” action. Not a generic file workflow.
+### 5.5 Core camp movement (unchanged principles)
 
-### Camp Director
-Camp exeats and approvals (structured workflow; may intersect with electronic file movement).
-
-### Camp Clinic
-Medical / camp health workflows for authorized staff.
-
-### Nursing / Pregnant women
-Capture relevant information (including husband’s address for posting considerations) as specified.
-
-### Skills
-Capture / manage skills-related camp data as specified.
-
-### Exports
-Authorized download of Excel (and similar) extracts from camp and corps data.
+- Accommodation only after security check-in; bed uniqueness; hostel capacity
+- Bank desk is configurable; do not assume NYSC staff generate account numbers
+- Platoon auto-assignment from state-code rules where applicable
+- Kit issuance as operational status actions, not generic file upload
 
 ---
 
-## 6. Electronic File Movement (Digital Filing / Digital Minute Sheet)
+## 6. Electronic File Movement (Digital Minute Sheet)
 
-This is a **first-class operational module** from the CIS briefing. It digitizes paper file minutes and routing between officers.
+First-class module: structured cases + minutes tied to corps members, not a cloud drive.
 
-It is **not** a generic cloud drive. Each “file” is a structured case tied to a corps member (or related subject) with an auditable chain of minutes, attachments, and decisions.
+Staff dashboard: Pending Files, Approved Today, Returned Files, Pick a File, Search, Reports, Logout.
 
-### Staff dashboard (after log-in)
+Pick file → search state code/call-up → details grid → add sheet → select officer(s) → priority → auto date/time → subject → attach → minute → draft or forward.
 
-Example concepts:
+Receiver: view docs, read minutes, add minute, draft, upload, Recommend/Approve, Return, Reject, Forward. All time-stamped. Drafts deletable; forwarded minutes not deletable.
 
-- Welcome, {Officer name}
-- Pending Files (pushed to you, not yet attended)
-- Approved Today (approvals relevant to you not yet viewed)
-- Returned Files (rejected or returned for correction)
-- Pick a File
-- Search
-- Reports / Statistics (work done, monthly analysis, batch analysis)
-- Logout
+Example chain: LGI → ZI → Head CIM → State Coordinator (stamp/signature) → LGI + CC.
 
-### Pick a File / Initiate
-
-1. Find by state code or call-up number
-2. Corps member details appear in the file grid
-3. Add a sheet (blank area to type a minute)
-4. Select officer(s) to receive the minute
-5. Select priority
-6. Date and time auto-generated
-7. Subject of the report
-8. Attach required documents
-9. Write the minute
-10. Save as draft **or**
-11. Forward file — next officer receives it immediately
-
-### Receiving officer actions
-
-- View attached documents
-- Read prior minutes
-- Add a minute
-- Save draft
-- Upload additional documents
-- Recommend or Approve
-- Return
-- Reject
-- Forward
-
-Every action is **time-stamped** automatically.
-
-If rejected, the originating officer can re-edit their minute and re-forward.  
-**Drafts** can be deleted; **minutes already forwarded** cannot be deleted (audit integrity).
-
-### Digital minute sheet example pattern
-
-A file may accumulate sheets such as:
-
-- LGI → Zonal Inspector (request + attachments, e.g. medical report, employer stamp)
-- ZI → Head CIM (recommendation)
-- Head CIM → State Coordinator (for approval)
-- State Coordinator → LGI (and CC ZI, Head CIM, Registry) with approval, including official stamp/signature representation for the State Coordinator
-
-### Approvals and notification to parties
-
-On approval, LGI (or designated officer) may notify corps member and employer using captured phone/email channels.
-
-### Notifications
-
-The system should support notifying users through:
-
-- Email
-- SMS (optional)
-- WhatsApp (where integration is authorized and feasible)
-- In-app notifications
-
-### Registry and print
-
-- File tracking at Registry
-- Ability to print relevant reports and approvals for hard-copy filing where still required (e.g. print corps member approvals from LGA and file)
-
-### File movement reports (examples)
-
-- Files approved this month
-- Pending approvals
-- Overdue files
-- Files by department
-- Officer performance
-- Approval turnaround time
+Notifications: email, SMS (optional), WhatsApp (if authorized), in-app. Registry tracking + print for hard copy where required.
 
 ---
 
 ## 7. Scope by Geography (LGI / ZI)
 
-- Corps data organized LGA by LGA, Zone by Zone
-- **LGI** sees only corps members in their LGA
-- **Zonal Inspector** sees only corps members in their zone
-- Broader roles (e.g. State Coordinator, designated HQ officers) see wider scope per permission configuration
+- Corps data LGA by LGA, Zone by Zone
+- **LGI** sees only corps members in their LGA (`user.lgaCode`)
+- **ZI** sees only corps members in their zone (`user.zoneCode`)
+- Broader roles per permission configuration
 
-Phone/app-friendly reduction of CIS views for LGI and ZI field work is a stated goal.
+Scope must be enforced on **data queries**, not only in the UI.
 
 ---
 
 ## 8. Admin, Profiles and Officers
 
-Admin capabilities (via Super Admin / authorized admin roles):
-
-- Upload file and update (with intent to synchronize with national NIS where authorized — treat NIS integration as an external dependency)
-- Upload picture files
-- Register profiles
-- Set permissions (dynamic RBAC)
-
-**Officer onboarding notes from stakeholders:**
-
 - Admin creates officer names, GL, ranks and post
-- Each officer completes their profile
-- Activation link via email and WhatsApp
-- Printout sent to email for submission to HRM
+- Each officer completes profile via **activation link** (email and WhatsApp where configured)
+- Printout to email for HRM submission
+- Dynamic RBAC; upload files/pictures; NIS sync only if authorized
 
 ---
 
 ## 9. Post-Camp / Service Year
 
-Continue the PCM record after orientation camp. Modules include (structured workflows, not mere uploads):
-
-- PPA posting, records, acceptance, changes
-- Leave applications (often via electronic file movement)
-- Relocation applications
-- Corps member requests
-- Documents
-- Service history
-- Final clearance
-- Completion / pass-out records
+PPA, leave, relocation, requests, documents, clearance, completion — structured workflows (often via electronic file movement).
 
 ---
 
 ## 10. Official Roles and Permissions (Dynamic RBAC)
 
-**Do NOT hard-code a fixed list of NYSC official roles.**
+**Do NOT hard-code a fixed list of official roles.** Super Admin creates/renames/deactivates roles and maps permissions. Menu visibility is **not** security.
 
-There must be a **Super Admin-controlled dynamic RBAC system**.
-
-Super Admin should be able to:
-
-- Create roles
-- Rename roles
-- Deactivate roles
-- Assign permissions
-- Assign users to roles
-- Control accessible modules and menu visibility
-- Control actions and scope (e.g. LGA-only, zone-only)
-
-**Potential initial operational roles (starting concepts only — not immutable):**
-
-- Super Admin
-- State Coordinator
-- Camp Director
-- Security Officer / Security Committee
-- Accommodation Officer
-- Registration Officer / Registration Committee
-- Bank / Account Registration Officer
-- Platoon Officer
-- Kit / Store Officer
-- Camp Clinic / Medical Officer
-- LGI (Local Government Inspector)
-- Zonal Inspector (ZI)
-- Head CIM
-- Registry Officer
-- CDS Officer
-- PPA Officer
-- Clearance Officer
-- Welfare Officer
-- Reports / Records Officer
-
-Super Admin must be able to create roles such as “Camp Documentation Supervisor” and define exact access.
-
-**IMPORTANT:** Menu visibility is **NOT** security. Every backend operation must enforce authorization independently.
+Starter concepts: Super Admin, State Coordinator, Camp Director, Security, Registration, Accommodation, Platoon, LGI, ZI, Head CIM, Registry, CDS, PPA, Clearance, Welfare, Reports, Clinic, Kit/Store, etc.
 
 ---
 
 ## 11. State Coordinator and Camp Director
 
-High-level operational roles with broader visibility, still implemented through the same permission system.
-
-- **State Coordinator** — day-to-day administration of the state secretariat; terminal approval authority on many electronic files (with stamp/signature representation as specified).
-- **Camp Director** — operational oversight of camp activities, exeats and camp approvals.
-
-Do not hard-code exact permissions; configure granularly.
+High-level roles via the same permission system; SC terminal approvals with stamp/signature representation; Camp Director camp oversight and exeats.
 
 ---
 
 ## 12. Auditability & Security
 
-Official administrative system. Important actions must be auditable.
-
-Track at minimum:
-
-- Who performed the action
-- Role at time of action
-- What changed (previous / new value)
-- Timestamp
-- Affected PCM / file / entity
-- IP / device / session where appropriate
-
-Examples: accommodation change, PPA change, account number change, platoon change, kit issued, clearance approved, minute forwarded/approved/rejected, user role changed, PCM record edited.
-
-**Security expectations from stakeholders:**
-
-- User login
-- Role-based permissions
-- Password encryption
-- Audit logs
-- Automatic backups
-- SSL (HTTPS)
-- Session timeouts
-
-Do not implement destructive administrative operations without authorization and audit logging.
+Audit who/role-at-time/what/before-after/when/PCM/entity/IP. Login, RBAC, password encryption, audit logs, backups, HTTPS, session timeouts. Rate-limit login attempts.
 
 ---
 
 ## 13. Data Model Principle
 
-The **PCM (Corps Member) is the central entity**.
-
-Do not duplicate PCM information unnecessarily across modules.
-
-Prefer relationships / references:
+PCM is central. Prefer:
 
 ```
 PCM
-├── Mobilisation / Verification
-├── Camp Registration
-├── Security Check-in / In-Out logs
+├── Verification / Intake
+├── Married Women / Nursing profile (Camp Portal form)
+├── Skills (up to 3)
+├── NIN / Account artefacts
+├── Security Check-in / In-Out
 ├── Accommodation
-├── Bank Account / NIN artefacts
+├── Registration
 ├── Platoon + Attendance
 ├── Kit Issuance
-├── Camp Clinic / Special categories (e.g. nursing)
-├── Skills
-├── Documents
-├── PPA
-├── CDS
-├── Electronic Files (cases) + Minute Sheets + Attachments
-├── Clearance
-├── Requests / Relocation / Leave
+├── Clinic
+├── Electronic Files + Minutes
+├── PPA / Leave / Relocation / Clearance
 └── Audit History
 ```
 
-Electronic files reference the PCM (and optionally employer, LGA, zone) rather than copying the full identity into every minute.
+---
+
+## 14. Implementation Phases
+
+0 Architecture · 1 Public site · 2 Identity/RBAC/activation/scope · 3 PCM Intake · 4 Camp ops · 5 Camp management (Married Women, Skills, Account forms, attendance…) · 6 File movement + service year · 7 Analytics · 8 Hardening & field apps
 
 ---
 
-## 14. Implementation Phases (Roadmap)
+## 15. Working Rules
 
-### PHASE 0 — Repository & Architecture
-Initialize repository, structure, env, auth/RBAC architecture outlines, logging, docs, testing/CI foundation.
-
-### PHASE 1 — Foundation + Public Website
-Public-facing NYSC Ekiti website and foundational infrastructure.
-
-### PHASE 2 — Identity + Dynamic RBAC
-Authentication, users, roles, permissions, scoped access (LGA/zone), audit logging, Super Admin controls, officer profile activation flow foundations.
-
-### PHASE 3 — PCM Intake
-QR scanner, verification adapter, PCM creation, duplicate detection, onboarding flows.
-
-### PHASE 4 — Camp Operations
-Security check-in / in-out, accommodation, registration, account/NIN, bank desk, platoon, kit issuance — same PCM record.
-
-### PHASE 5 — Camp Management
-Camp Director exeats/approvals, clinic, nursing/pregnant data, skills, attendance (daily + periodic QR/face), exports.
-
-### PHASE 6 — Electronic File Movement + Service-Year
-Digital minute sheets, pick-file, forward/return/reject/approve, registry tracking, notifications, leave/relocation/PPA-related structured cases, employer/corps notification paths.
-
-### PHASE 7 — Analytics, Reporting & Administration
-Dashboards, file statistics, officer performance, exports, audit views, admin uploads, NIS sync *if authorized*.
-
-### PHASE 8 — Hardening, Mobile Field Views & Production
-Security review, performance, backups, monitoring, LGI/ZI phone-friendly views, Windows/Android/iOS strategy (PWA and/or native as decided), production deployment, documentation.
-
----
-
-## 15. Working Rules for Implementers
-
-- Do **not** implement the entire system in one pass.
-- Verify each phase before moving on.
-- Do not create placeholder features merely to claim a phase is complete.
-- Do not invent business rules that contradict this document.
-- Do not turn the platform into a generic ERP or a pure file-sharing app.
-- Electronic File Movement is a **structured case + minute workflow**, not Dropbox.
-- The PCM record remains central; files are about the corps member lifecycle and secretariat processes.
-- Build it as a serious production system for NYSC Ekiti State.
+Phase by phase; no invented business rules; not a generic ERP or Dropbox; PCM-centric; production quality.
 
 ---
 
 ## 16. Open Items / External Dependencies
 
-Documented for clarity (do not silently assume):
-
-- Authorization for any automation against national NYSC / NIS endpoints
-- Exact field list from call-up verification
-- Face-ID attendance vendor/device policy and privacy constraints
-- WhatsApp / SMS gateway contracts and data protection
-- Official stamp/signature asset for State Coordinator digital approvals
-- Confirmed public contact details for the website
-- Priority order of camp sub-modules vs electronic file movement for the first production cut
+- NYSC/NIS automation authorization
+- Call-up verification field list
+- Face-ID policy
+- WhatsApp/SMS gateways
+- SC stamp asset
+- Public contact details
+- Skill catalogue contents from stakeholders

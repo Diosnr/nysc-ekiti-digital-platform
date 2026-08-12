@@ -91,6 +91,24 @@ export default function AdminUsersPage() {
     load();
   }
 
+  async function issueActivation(userId: string, email: string) {
+    setError(null);
+    setMsg(null);
+    const res = await staffFetch(`/api/admin/users/${userId}/activate`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Could not issue activation link");
+      return;
+    }
+    setMsg(`Activation link for ${email}: ${data.activationUrl}`);
+    try {
+      await navigator.clipboard.writeText(data.activationUrl);
+      setMsg((m) => `${m} (copied to clipboard)`);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function toggleRole(id: string) {
     setForm((f) => ({
       ...f,
@@ -106,7 +124,7 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Users / Officers</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Create officers, assign roles, set LGA/zone scope fields.
+            Create officers, assign roles, set LGA/zone scope, issue activation links.
           </p>
         </div>
         <button
@@ -124,7 +142,7 @@ export default function AdminUsersPage() {
         </p>
       )}
       {msg && (
-        <p className="mt-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+        <p className="mt-4 break-all rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
           {msg}
         </p>
       )}
@@ -151,7 +169,7 @@ export default function AdminUsersPage() {
           />
           <input
             type="password"
-            placeholder="Temporary password"
+            placeholder="Optional temp password (or use activation link)"
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -172,14 +190,14 @@ export default function AdminUsersPage() {
           />
           <input
             type="text"
-            placeholder="LGA code (for LGI scope)"
+            placeholder="LGA code (LGI scope)"
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             value={form.lgaCode}
             onChange={(e) => setForm({ ...form, lgaCode: e.target.value })}
           />
           <input
             type="text"
-            placeholder="Zone code (for ZI scope)"
+            placeholder="Zone code (ZI scope)"
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             value={form.zoneCode}
             onChange={(e) => setForm({ ...form, zoneCode: e.target.value })}
@@ -222,6 +240,7 @@ export default function AdminUsersPage() {
               <th className="px-4 py-3">Roles</th>
               <th className="px-4 py-3">Scope</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -243,6 +262,15 @@ export default function AdminUsersPage() {
                   >
                     {u.isActive ? "Active" : "Inactive"}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => issueActivation(u.id, u.email)}
+                    className="text-xs font-medium text-nysc-green hover:underline"
+                  >
+                    Activation link
+                  </button>
                 </td>
               </tr>
             ))}

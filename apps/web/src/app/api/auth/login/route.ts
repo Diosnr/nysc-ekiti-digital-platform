@@ -2,15 +2,26 @@ import { prisma } from "@/lib/db";
 import { verifyPassword, issueTokens } from "@/lib/auth-server";
 import { writeAudit } from "@/lib/audit";
 import { jsonOk, jsonError, clientMeta } from "@/lib/api";
+import { limitLogin } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const email = String(body.email ?? "").trim().toLowerCase();
     const password = String(body.password ?? "");
+    const meta = clientMeta(req);
+    const ip = meta.ip ?? "unknown";
 
     if (!email || !password) {
       return jsonError("Email and password are required");
+    }
+
+    const limited = limitLogin(ip, email);
+    if (!limited.ok) {
+      return jsonError(
+        `Too many login attempts. Try again in ${limited.retryAfterSec} seconds.`,
+        429
+      );
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
@@ -23,7 +34,6 @@ export async function POST(req: Request) {
       return jsonError("Invalid credentials", 401);
     }
 
-    const meta = clientMeta(req);
     const tokens = await issueTokens(user.id, meta);
 
     await writeAudit({
