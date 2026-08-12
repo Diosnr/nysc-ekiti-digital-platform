@@ -13,6 +13,7 @@ type Me = {
 
 const nav = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
+  { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
   { href: "/staff/admin/users", label: "Users", perm: "user:read" },
   { href: "/staff/admin/roles", label: "Roles", perm: "role:read" },
   { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read" },
@@ -48,7 +49,8 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   }
 
   const perms = me?.permissions ?? [];
-  const can = (p: string | null) => !p || perms.includes(p) || perms.includes("*");
+  const can = (p: string | null) =>
+    !p || perms.includes(p) || perms.includes("pcm:search") && p === "pcm:read" || perms.includes("*");
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -59,19 +61,21 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
               NYSC Ekiti · Staff
             </Link>
             <nav className="hidden gap-1 sm:flex">
-              {nav.filter((n) => can(n.perm)).map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                    pathname.startsWith(n.href)
-                      ? "bg-green-50 text-nysc-green"
-                      : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {n.label}
-                </Link>
-              ))}
+              {nav
+                .filter((n) => can(n.perm))
+                .map((n) => (
+                  <Link
+                    key={n.href}
+                    href={n.href}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                      pathname.startsWith(n.href)
+                        ? "bg-green-50 text-nysc-green"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {n.label}
+                  </Link>
+                ))}
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm">

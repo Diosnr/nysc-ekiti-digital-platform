@@ -1,6 +1,6 @@
 // NYSC Ekiti Digital Platform — Prisma Schema
-// Phase 2: Identity + Dynamic RBAC + Audit
-// PCM remains the central aggregate (expanded in Phases 3–6).
+// Phase 2: Identity + RBAC + Audit
+// Phase 3: PCM (central aggregate) + verification records
 
 generator client {
   provider = "prisma-client-js"
@@ -16,30 +16,28 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  name         String?
-  passwordHash String?
-  phone        String?
-  /// Grade Level (GL) as used in NYSC secretariat
-  gradeLevel   String?
-  rank         String?
-  post         String?
-  /// Optional geographic scope keys (e.g. LGA code, zone code)
-  lgaCode      String?
-  zoneCode     String?
-  isActive     Boolean   @default(true)
-  /// Activation for officer self-service profile completion
+  id                String    @id @default(cuid())
+  email             String    @unique
+  name              String?
+  passwordHash      String?
+  phone             String?
+  gradeLevel        String?
+  rank              String?
+  post              String?
+  lgaCode           String?
+  zoneCode          String?
+  isActive          Boolean   @default(true)
   activationToken   String?
   activationSentAt  DateTime?
   activatedAt       DateTime?
-  lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  roles        UserRole[]
-  auditLogs    AuditLog[] @relation("AuditActor")
-  refreshTokens RefreshToken[]
+  roles             UserRole[]
+  auditLogs         AuditLog[] @relation("AuditActor")
+  refreshTokens     RefreshToken[]
+  pcmsCreated       Pcm[]      @relation("PcmCreatedBy")
 
   @@index([lgaCode])
   @@index([zoneCode])
@@ -47,29 +45,25 @@ model User {
 }
 
 model RefreshToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   revokedAt DateTime?
   userAgent String?
   ip        String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic RBAC
-// ---------------------------------------------------------------------------
-
 model Role {
   id          String   @id @default(cuid())
   name        String   @unique
   description String?
-  isSystem    Boolean  @default(false) // e.g. Super Admin — cannot delete
+  isSystem    Boolean  @default(false)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -80,10 +74,9 @@ model Role {
 
 model Permission {
   id          String   @id @default(cuid())
-  /// resource:action e.g. "pcm:read", "file:forward"
   key         String   @unique
   description String?
-  module      String?  // grouping for admin UI
+  module      String?
   createdAt   DateTime @default(now())
 
   roles RolePermission[]
@@ -101,10 +94,9 @@ model RolePermission {
 model UserRole {
   userId     String
   roleId     String
-  /// Optional extra scope override JSON (future)
   scopeJson  String?
   assignedAt DateTime @default(now())
-  assignedBy String?
+  assignedBy  String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -112,21 +104,17 @@ model UserRole {
   @@id([userId, roleId])
 }
 
-// ---------------------------------------------------------------------------
-// Audit
-// ---------------------------------------------------------------------------
-
 model AuditLog {
   id              String   @id @default(cuid())
   actorId         String?
   actor           User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
   actorEmail      String?
-  actorRoleAtTime String?  // comma-separated role names at time of action
-  action          String   // e.g. user.create, role.assign, pcm.update
+  actorRoleAtTime String?
+  action          String
   entityType      String?
   entityId        String?
-  pcmId           String?  // when action affects a corps member
-  beforeJson      String?  // JSON snapshot
+  pcmId           String?
+  beforeJson      String?
   afterJson       String?
   ip              String?
   userAgent       String?
@@ -138,4 +126,73 @@ model AuditLog {
   @@index([pcmId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — PCM (Prospective / Corps Member) central aggregate
+// ---------------------------------------------------------------------------
+
+enum PcmLifecycleStatus {
+  MOBILISED
+  VERIFIED
+  CHECKED_IN
+  ACCOMMODATED
+  REGISTERED
+  BANK_REGISTERED
+  PLATOON_ASSIGNED
+  KIT_ISSUED
+  CAMP_ACTIVE
+  CAMP_EXIT_REQUESTED
+  CAMP_EXITED
+  PPA_POSTED
+  CLEARED
+  COMPLETED
+}
+
+model Pcm {
+  id              String             @id @default(cuid())
+  /// Call-up / state code — primary business key when available
+  callUpNumber    String             @unique
+  stateCode       String?
+  fullName        String
+  gender          String?
+  dateOfBirth     DateTime?
+  institution     String?
+  course          String?
+  phone           String?
+  email           String?
+  photographUrl   String?
+  /// Deployment / posting geography (filled progressively)
+  lgaCode         String?
+  zoneCode        String?
+  stream          String?
+  originState     String?
+  status          PcmLifecycleStatus @default(VERIFIED)
+  notes           String?
+  createdById     String?
+  createdBy       User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  verifications   VerificationRecord[]
+
+  @@index([fullName])
+  @@index([stateCode])
+  @@index([lgaCode])
+  @@index([zoneCode])
+  @@index([status])
+}
+
+model VerificationRecord {
+  id            String   @id @default(cuid())
+  pcmId         String
+  pcm           Pcm      @relation(fields: [pcmId], references: [id], onDelete: Cascade)
+  source        String   // manual | scraping | official_api
+  inputRef      String?  // QR payload or URL used
+  rawJson       String?  // normalized payload snapshot
+  verifiedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([pcmId])
+  @@index([verifiedAt])
 }

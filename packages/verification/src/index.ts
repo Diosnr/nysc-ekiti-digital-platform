@@ -1,47 +1,69 @@
 /**
  * NYSC Call-up Verification Adapter
- *
- * Isolation boundary: the rest of the system depends only on this interface.
- * Implementations (manual, scraping, official API) can be swapped without
- * rewriting PCM intake or domain logic.
- *
- * IMPORTANT: Do not assume that any automation against an NYSC endpoint is
- * authorized merely because the endpoint is technically reachable.
- * Treat authorization as an external dependency.
+ * Isolation boundary — domain code depends only on this interface.
  */
 
 export interface VerifiedCallUpData {
-  /** Call-up / state code or equivalent unique identifier */
   callUpNumber: string;
   fullName: string;
   gender?: string;
   institution?: string;
   course?: string;
   photographUrl?: string;
+  stateCode?: string;
+  dateOfBirth?: string;
   raw?: Record<string, unknown>;
   verifiedAt: Date;
   source: "manual" | "scraping" | "official_api";
 }
 
 export interface CallUpVerificationAdapter {
-  /**
-   * Accept a QR payload, verification URL, or manual reference and return
-   * normalized verified data. Implementations must not redirect the user away
-   * from the platform as part of the normal flow.
-   */
   verify(input: string): Promise<VerifiedCallUpData>;
 }
 
 /**
- * Manual fallback adapter — used when automated verification is unavailable
- * or not yet authorized. Expects structured manual entry upstream.
+ * Manual adapter: input is JSON string of VerifiedCallUpData fields
+ * (used for official-assisted / manual fallback intake).
  */
 export class ManualVerificationAdapter implements CallUpVerificationAdapter {
   async verify(input: string): Promise<VerifiedCallUpData> {
-    // In real use the calling service supplies already-collected fields.
-    // This adapter exists to satisfy the interface and enable development.
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(input);
+    } catch {
+      throw new Error(
+        "Manual verification requires a JSON payload with callUpNumber and fullName"
+      );
+    }
+    const callUpNumber = String(data.callUpNumber ?? "").trim();
+    const fullName = String(data.fullName ?? "").trim();
+    if (!callUpNumber || !fullName) {
+      throw new Error("callUpNumber and fullName are required");
+    }
+    return {
+      callUpNumber,
+      fullName,
+      gender: data.gender ? String(data.gender) : undefined,
+      institution: data.institution ? String(data.institution) : undefined,
+      course: data.course ? String(data.course) : undefined,
+      photographUrl: data.photographUrl ? String(data.photographUrl) : undefined,
+      stateCode: data.stateCode ? String(data.stateCode) : undefined,
+      dateOfBirth: data.dateOfBirth ? String(data.dateOfBirth) : undefined,
+      raw: data,
+      verifiedAt: new Date(),
+      source: "manual",
+    };
+  }
+}
+
+/**
+ * Placeholder for future QR URL fetch / official API.
+ * Does not scrape; documents authorization dependency.
+ */
+export class UnauthorizedRemoteAdapter implements CallUpVerificationAdapter {
+  async verify(_input: string): Promise<VerifiedCallUpData> {
     throw new Error(
-      "ManualVerificationAdapter requires structured data from the calling service; raw string verification is not supported."
+      "Remote NYSC verification is not authorized/configured. Use manual intake or set VERIFICATION_ADAPTER when approved."
     );
   }
 }
@@ -54,10 +76,7 @@ export function createVerificationAdapter(
       return new ManualVerificationAdapter();
     case "scraping":
     case "official_api":
-      // Placeholders — concrete implementations added when authorized.
-      throw new Error(
-        `Verification adapter mode "${mode}" is not yet implemented or authorized.`
-      );
+      return new UnauthorizedRemoteAdapter();
     default:
       return new ManualVerificationAdapter();
   }
