@@ -1,34 +1,37 @@
 # Phase 2 Checklist — Identity + Dynamic RBAC
 
-## Completed in this commit
+## Completed
 
 - [x] Prisma models: User, RefreshToken, Role, Permission, RolePermission, UserRole, AuditLog
-- [x] Permission catalog (admin, pcm, camp, files, service, content, reports)
-- [x] Seed script: all permissions, Super Admin role (all perms), starter roles, Super Admin user
-- [x] `@nysc/auth` package: password hash/verify, JWT access/refresh, `hasPermission`
-- [x] Staff portal entry + login UI foundation (`/staff`, `/staff/login`)
-- [x] Next.js config: static export **only** for GitHub Pages builds (server mode for ops/auth)
-- [x] Source of Truth already includes CIS officer activation, LGI/ZI scope, file permissions
+- [x] Permission catalog + seed (Super Admin + starter roles)
+- [x] `@nysc/auth` package
+- [x] Auth API: `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`, `GET /api/auth/me`
+- [x] Admin API: `GET/POST /api/admin/users`, `GET/POST /api/admin/roles`, `PUT /api/admin/roles/[id]/permissions`, `GET /api/admin/permissions`, `GET /api/admin/audit`
+- [x] `requireAuth` + permission checks on admin routes
+- [x] Audit writer on login, logout, user create, role create, permission mapping
+- [x] Staff login form wired to API + dashboard session shell
+- [x] Next.js server mode for ops (static export only for GitHub Pages builds)
 
-## Required locally to go live with auth
+## Local verification
 
-1. Copy `.env.example` → `.env` and set strong `JWT_*_SECRET` values (≥32 chars)
-2. `docker compose up -d`
-3. From `packages/database`: `npx prisma migrate dev --name phase2_identity_rbac` then `npm run seed`
-4. Default Super Admin (change immediately):
-   - Email: `admin@nysc-ekiti.local` (or `SEED_SUPER_ADMIN_EMAIL`)
-   - Password: `ChangeMeNow!123` (or `SEED_SUPER_ADMIN_PASSWORD`)
+```bash
+cp .env.example .env   # strong JWT secrets
+docker compose up -d
+cd packages/database && npm install && npx prisma migrate dev --name phase2_identity_rbac && npm run seed
+cd ../../apps/web && npm install && npm run dev
+```
 
-## Remaining Phase 2 work (next commits)
+Login at http://localhost:3000/staff/login  
+Default: `admin@nysc-ekiti.local` / `ChangeMeNow!123`
 
-- [ ] API routes: `POST /api/auth/login`, refresh, logout
-- [ ] API routes: users CRUD, roles CRUD, role–permission mapping (Super Admin)
-- [ ] Middleware / guards enforcing permissions on every protected route
-- [ ] Audit log writer service used by mutations
-- [ ] Officer activation flow (email/WhatsApp link) foundation
-- [ ] Staff dashboard shell gated by session
-- [ ] Scope enforcement helpers (LGA / zone) for LGI and ZI
+## Remaining Phase 2 (optional polish before Phase 3)
 
-## Rule reminder
+- [ ] Super Admin UI for roles/permissions (API is ready)
+- [ ] Officer activation email/WhatsApp link flow
+- [ ] HttpOnly cookie session option (currently bearer + localStorage for SPA-style staff UI)
+- [ ] LGA/zone scope helper used on data queries
+- [ ] Rate limiting on login
 
-Menu visibility ≠ security. Backend must check permissions on every sensitive operation.
+## Rule
+
+Menu visibility ≠ security. Every protected API uses `requireAuth` + permission keys.
