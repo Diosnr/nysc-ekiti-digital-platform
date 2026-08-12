@@ -13,16 +13,22 @@
 - [x] Root README updated
 - [x] `.gitignore` added
 - [x] `.env.example` added
+- [x] Monorepo / workspace structure (`apps/`, `packages/`)
+- [x] Root `package.json` + workspaces
+- [x] Next.js app skeleton (`apps/web`) with institutional placeholder home page
+- [x] Prisma package skeleton + minimal schema (`packages/database`)
+- [x] Shared package (`packages/shared`)
+- [x] Verification adapter package with interface + manual stub (`packages/verification`)
+- [x] Docker Compose for PostgreSQL
+- [x] GitHub Actions CI skeleton
+- [x] Development guide (`docs/DEVELOPMENT.md`)
 
-## Remaining in Phase 0
+## Remaining / Pending Confirmation
 
-- [ ] Initialize monorepo / project structure (`apps/`, `packages/`)
-- [ ] Root `package.json` + workspace configuration
-- [ ] Basic Next.js app skeleton (public site placeholder)
-- [ ] Prisma package skeleton + initial schema outline
-- [ ] Docker Compose for PostgreSQL (and optional services)
-- [ ] GitHub Actions CI skeleton (lint / typecheck / test)
-- [ ] Basic logging & error-handling conventions documented or scaffolded
-- [ ] Confirmation that Source of Truth is accepted by stakeholders
+- [ ] Stakeholder acceptance of `source of truth.md` as the product authority
+- [ ] Confirmation of technical stack choices (or requested changes)
+- [ ] Full local `npm install` + `docker compose up` verification by a developer
+- [ ] Decision on NestJS API app timing (can stay Next.js Route Handlers initially)
 
-Once the remaining scaffolding items are in place, Phase 0 can be marked complete and Phase 1 (Public Website) can begin.
+**Phase 0 is considered complete for repository & architecture establishment.**  
+Ready to proceed to **Phase 1 — Foundation + Public Website** on confirmation.
