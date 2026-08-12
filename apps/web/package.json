@@ -14,6 +14,7 @@
     "@nysc/auth": "*",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
+    "html5-qrcode": "^2.3.8",
     "jose": "^5.9.0",
     "next": "^15.0.0",
     "react": "^19.0.0",

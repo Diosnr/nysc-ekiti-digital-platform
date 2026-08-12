@@ -4,57 +4,61 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type Step = "choose" | "qr" | "manual" | "done";
 
+type FormState = {
+  callUpNumber: string;
+  fullName: string;
+  gender: string;
+  institution: string;
+  course: string;
+  stateCode: string;
+  phone: string;
+  email: string;
+};
+
+const emptyForm: FormState = {
+  callUpNumber: "",
+  fullName: "",
+  gender: "",
+  institution: "",
+  course: "",
+  stateCode: "",
+  phone: "",
+  email: "",
+};
+
 export function PcmIntakeClient() {
   const [step, setStep] = useState<Step>("choose");
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [qrRaw, setQrRaw] = useState("");
   const [created, setCreated] = useState<{ callUpNumber: string; fullName: string } | null>(null);
-  const [form, setForm] = useState({
-    callUpNumber: "",
-    fullName: "",
-    gender: "",
-    institution: "",
-    course: "",
-    stateCode: "",
-    phone: "",
-    email: "",
-  });
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm);
 
-  const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+  const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
+  const handlingScan = useRef(false);
+  const readerId = "pcm-qr-reader";
+
+  const stopScanner = useCallback(async () => {
+    try {
+      if (scannerRef.current) {
+        await scannerRef.current.stop();
+        scannerRef.current = null;
+      }
+    } catch {
+      /* already stopped */
+    }
+    setScanning(false);
   }, []);
 
   useEffect(() => {
-    return () => stopCamera();
-  }, [stopCamera]);
+    return () => {
+      void stopScanner();
+    };
+  }, [stopScanner]);
 
-  async function startCamera() {
-    setCameraError(null);
-    setStep("qr");
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-    } catch {
-      setCameraError(
-        "Camera not available. Paste the QR content or verification link below, or use manual entry."
-      );
-    }
-  }
-
-  async function submitQrPayload(input: string, data?: typeof form) {
+  async function submitQrPayload(input: string, data?: FormState) {
     setLoading(true);
     setError(null);
     setMsg(null);
@@ -67,8 +71,8 @@ export function PcmIntakeClient() {
           input,
           data: data
             ? {
-                callUpNumber: data.callUpNumber,
-                fullName: data.fullName,
+                callUpNumber: data.callUpNumber || undefined,
+                fullName: data.fullName || undefined,
                 gender: data.gender || undefined,
                 institution: data.institution || undefined,
                 course: data.course || undefined,
@@ -85,14 +89,17 @@ export function PcmIntakeClient() {
         return;
       }
       if (json.status === "needs_completion") {
-        setMsg(json.message);
+        setMsg(
+          json.message ??
+            "QR scanned. Confirm your call-up number and full name from the letter."
+        );
         setForm((f) => ({
           ...f,
           callUpNumber: json.partial?.callUpNumber || f.callUpNumber,
         }));
         setQrRaw(input);
         setStep("manual");
-        stopCamera();
+        await stopScanner();
         return;
       }
       setCreated({
@@ -100,11 +107,59 @@ export function PcmIntakeClient() {
         fullName: json.pcm.fullName,
       });
       setStep("done");
-      stopCamera();
+      await stopScanner();
     } catch {
-      setError("Network error");
+      setError("Network error while submitting scan");
     } finally {
       setLoading(false);
+      handlingScan.current = false;
+    }
+  }
+
+  async function startLiveScan() {
+    setError(null);
+    setMsg(null);
+    setStep("qr");
+    handlingScan.current = false;
+
+    // Wait for the reader div to mount
+    await new Promise((r) => setTimeout(r, 50));
+
+    try {
+      const { Html5Qrcode } = await import("html5-qrcode");
+      const scanner = new Html5Qrcode(readerId);
+      scannerRef.current = scanner;
+
+      await scanner.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const edge = Math.min(viewfinderWidth, viewfinderHeight) * 0.75;
+            return { width: edge, height: edge };
+          },
+          aspectRatio: 1,
+        },
+        async (decodedText) => {
+          if (handlingScan.current) return;
+          handlingScan.current = true;
+          setQrRaw(decodedText);
+          setMsg("QR detected — verifying…");
+          await stopScanner();
+          await submitQrPayload(decodedText);
+        },
+        () => {
+          /* ignore per-frame miss */
+        }
+      );
+      setScanning(true);
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Could not start camera";
+      setError(
+        `${message}. Allow camera permission, or paste the QR link/text below, or use manual entry.`
+      );
+      setScanning(false);
     }
   }
 
@@ -113,7 +168,6 @@ export function PcmIntakeClient() {
     setLoading(true);
     setError(null);
     try {
-      // If we came from QR, re-submit with completion fields
       if (qrRaw) {
         await submitQrPayload(qrRaw, form);
         return;
@@ -168,12 +222,12 @@ export function PcmIntakeClient() {
       {step === "choose" && (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            Register with your NYSC call-up letter. Prefer scanning the QR code on the letter.
-            You stay on this NYSC Ekiti site — you are not sent away to another page.
+            Register with your NYSC call-up letter. Scan the QR code on the letter — you stay on this
+            NYSC Ekiti site; you are not sent away to another page.
           </p>
           <button
             type="button"
-            onClick={startCamera}
+            onClick={() => void startLiveScan()}
             className="w-full rounded-md bg-nysc-green px-4 py-3 text-sm font-semibold text-white"
           >
             Scan call-up QR code
@@ -191,19 +245,23 @@ export function PcmIntakeClient() {
       {step === "qr" && (
         <div className="space-y-4">
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-black">
-            <video ref={videoRef} className="aspect-square w-full object-cover" playsInline muted />
+            {/* html5-qrcode mounts its video into this element */}
+            <div id={readerId} className="w-full" />
           </div>
-          {cameraError && (
-            <p className="text-sm text-amber-800">{cameraError}</p>
-          )}
+          <p className="text-center text-sm text-slate-600">
+            {scanning
+              ? "Point your camera at the QR on your call-up letter…"
+              : loading
+                ? "Processing scan…"
+                : "Starting camera…"}
+          </p>
           <p className="text-xs text-slate-500">
-            Point your camera at the QR on your call-up letter. You can also paste the QR link or
-            text below if the camera cannot read it yet.
+            If the camera cannot read the code, paste the QR link or text below.
           </p>
           <textarea
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            rows={3}
-            placeholder="Paste verification URL or QR text here"
+            rows={2}
+            placeholder="Paste verification URL or QR text"
             value={qrRaw}
             onChange={(e) => setQrRaw(e.target.value)}
           />
@@ -211,15 +269,15 @@ export function PcmIntakeClient() {
             <button
               type="button"
               disabled={loading || !qrRaw.trim()}
-              onClick={() => submitQrPayload(qrRaw.trim())}
+              onClick={() => void submitQrPayload(qrRaw.trim())}
               className="flex-1 rounded-md bg-nysc-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
-              {loading ? "Verifying…" : "Use this QR / link"}
+              {loading ? "Verifying…" : "Use pasted QR / link"}
             </button>
             <button
               type="button"
               onClick={() => {
-                stopCamera();
+                void stopScanner();
                 setStep("choose");
               }}
               className="rounded-md border border-slate-300 px-4 py-2 text-sm"
@@ -233,7 +291,8 @@ export function PcmIntakeClient() {
       {step === "manual" && (
         <form onSubmit={onManual} className="space-y-3">
           <p className="text-sm text-slate-600">
-            Enter the details exactly as on your call-up letter.
+            Enter the details exactly as on your call-up letter
+            {qrRaw ? " (QR was scanned — complete any missing fields)." : "."}
           </p>
           <input
             required
@@ -290,7 +349,10 @@ export function PcmIntakeClient() {
             </button>
             <button
               type="button"
-              onClick={() => setStep("choose")}
+              onClick={() => {
+                setQrRaw("");
+                setStep("choose");
+              }}
               className="rounded-md border border-slate-300 px-4 py-2 text-sm"
             >
               Back
@@ -312,16 +374,9 @@ export function PcmIntakeClient() {
             onClick={() => {
               setCreated(null);
               setQrRaw("");
-              setForm({
-                callUpNumber: "",
-                fullName: "",
-                gender: "",
-                institution: "",
-                course: "",
-                stateCode: "",
-                phone: "",
-                email: "",
-              });
+              setForm(emptyForm);
+              setMsg(null);
+              setError(null);
               setStep("choose");
             }}
             className="mt-6 text-sm text-nysc-green hover:underline"
