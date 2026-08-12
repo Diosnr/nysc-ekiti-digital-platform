@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nysc-ekiti-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nysc
+      POSTGRES_PASSWORD: nysc
+      POSTGRES_DB: nysc_ekiti
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nysc -d nysc_ekiti"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

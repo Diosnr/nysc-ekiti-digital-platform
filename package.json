@@ -1,0 +1,24 @@
+{
+  "name": "nysc-ekiti-digital-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NYSC Ekiti Digital Information & Operations Platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "echo \"Use apps/web or apps/api scripts\"",
+    "build": "echo \"Build scripts to be wired with Turborepo\"",
+    "lint": "echo \"Lint scripts to be wired\"",
+    "typecheck": "echo \"Typecheck scripts to be wired\"",
+    "test": "echo \"Test scripts to be wired\"",
+    "db:generate": "npm run generate --workspace=@nysc/database",
+    "db:migrate": "npm run migrate --workspace=@nysc/database",
+    "db:studio": "npm run studio --workspace=@nysc/database"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@10"
+}
