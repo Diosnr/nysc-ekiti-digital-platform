@@ -10,8 +10,8 @@ const config: Config = {
     extend: {
       colors: {
         nysc: {
-          green: "#006400",
-          "green-light": "#228B22",
+          green: "#0B6E4F",
+          "green-light": "#0F8A63",
         },
       },
     },

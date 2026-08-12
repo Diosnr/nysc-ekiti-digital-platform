@@ -11,3 +11,17 @@ body {
   color: var(--foreground);
   background: var(--background);
 }
+
+/* Improve details/summary marker */
+details summary::-webkit-details-marker {
+  display: none;
+}
+details summary::after {
+  content: "+";
+  float: right;
+  font-weight: 600;
+  color: #64748b;
+}
+details[open] summary::after {
+  content: "−";
+}
