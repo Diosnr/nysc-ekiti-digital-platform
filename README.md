@@ -33,17 +33,36 @@ Treat that document as authoritative. Architecture and implementation decisions 
 | [Permission Model](./docs/PERMISSION_MODEL.md) | Dynamic RBAC design |
 | [Phases](./docs/PHASES.md) | Implementation roadmap |
 | [Assumptions](./docs/ASSUMPTIONS.md) | Documented assumptions & open questions |
+| [Development](./docs/DEVELOPMENT.md) | Local setup guide |
 
 ---
 
 ## Current Status
 
-**Phase 0 — Repository & Architecture** (in progress)
+| Phase | Status |
+|-------|--------|
+| **Phase 0 — Repository & Architecture** | Complete |
+| **Phase 1 — Foundation + Public Website** | Complete |
+| Phase 2 — Identity + Dynamic RBAC | Next |
 
-- Repository created
-- Source of Truth established
-- Architecture, domain, module and permission outlines written
-- Project scaffolding and tooling next
+### Public website pages live
+
+Home · About · Orientation Camp · News · Announcements · Events · Resources · Gallery · FAQs · Contact · PCM Services (landing)
+
+---
+
+## Quick start (local)
+
+```bash
+git clone https://github.com/Diosnr/nysc-ekiti-digital-platform.git
+cd nysc-ekiti-digital-platform
+cp .env.example .env
+docker compose up -d
+npm install
+cd apps/web && npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
