@@ -7,11 +7,8 @@ import { hasPermission } from "@nysc/auth";
 
 /**
  * POST /api/pcm/intake
- *
- * Public self-service (PCM) OR staff-assisted.
- * - mode: "manual" | "qr"
- * - Staff may send Authorization bearer (preferred for audit actor)
- * - Self-service works without auth for creating a new PCM from call-up
+ * Public self-service OR staff-assisted.
+ * QR mode accepts real NYSC CorpMemberVerify.aspx URLs and fills identity from the page.
  */
 export async function POST(req: Request) {
   try {
@@ -19,7 +16,6 @@ export async function POST(req: Request) {
     const mode = (body.mode as string) === "qr" ? "qr" : "manual";
     const payload = await getBearerPayload(req.headers.get("authorization"));
 
-    // If authenticated, require intake permission; public self-service allowed without token
     if (payload) {
       const allowed =
         hasPermission(payload.permissions, "pcm:create") ||
@@ -41,13 +37,11 @@ export async function POST(req: Request) {
 
     const verified = await adapter.verify(input);
 
-    // Pending placeholder names must be completed before finalizing
     const needsCompletion =
       verified.fullName === "PENDING_VERIFICATION" ||
       verified.callUpNumber.startsWith("PENDING-");
 
     if (needsCompletion && mode === "qr" && !body.data?.fullName) {
-      // Return partial so the self-service UI can ask for remaining fields
       return jsonOk({
         status: "needs_completion",
         partial: {
@@ -65,7 +59,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // Merge manual completion fields if provided with QR scan
     const callUpNumber = String(
       body.data?.callUpNumber || verified.callUpNumber
     ).trim();
@@ -90,9 +83,19 @@ export async function POST(req: Request) {
         institution: body.data?.institution || verified.institution,
         course: body.data?.course || verified.course,
         photographUrl: body.data?.photographUrl || verified.photographUrl,
-        stateCode: body.data?.stateCode || verified.stateCode,
+        stateCode:
+          body.data?.stateCode ||
+          verified.stateCode ||
+          verified.deploymentState,
         phone: body.data?.phone || verified.phone,
         email: body.data?.email || verified.email,
+        stream: verified.batchYear,
+        notes: [
+          verified.campAddress && `Camp: ${verified.campAddress}`,
+          verified.dateReporting && `Report: ${verified.dateReporting}`,
+        ]
+          .filter(Boolean)
+          .join(" | ") || undefined,
         status: "VERIFIED",
         createdById: payload?.sub,
         verifications: {
@@ -102,7 +105,13 @@ export async function POST(req: Request) {
               mode === "qr"
                 ? String(body.input ?? body.qrPayload ?? "").slice(0, 500)
                 : "manual",
-            rawJson: JSON.stringify(verified.raw ?? verified),
+            rawJson: JSON.stringify({
+              ...verified.raw,
+              source: verified.source,
+              deploymentState: verified.deploymentState,
+              campAddress: verified.campAddress,
+              batchYear: verified.batchYear,
+            }),
             verifiedAt: verified.verifiedAt,
           },
         },
@@ -128,7 +137,22 @@ export async function POST(req: Request) {
       userAgent: meta.userAgent,
     });
 
-    return jsonOk({ status: "created", pcm }, 201);
+    return jsonOk(
+      {
+        status: "created",
+        pcm: {
+          id: pcm.id,
+          callUpNumber: pcm.callUpNumber,
+          fullName: pcm.fullName,
+          gender: pcm.gender,
+          institution: pcm.institution,
+          stateCode: pcm.stateCode,
+          status: pcm.status,
+          photographUrl: pcm.photographUrl ? "[photo stored]" : null,
+        },
+      },
+      201
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Intake failed";
     console.error("pcm intake", e);
