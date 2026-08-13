@@ -26,14 +26,18 @@ export async function requireAuth(
     const ok = Array.isArray(permission)
       ? hasPermission(payload.permissions, permission)
       : hasPermission(payload.permissions, permission);
-    if (!ok) {
+    // Role-name fallback for Security Officer gate (until JWT re-issued after seed)
+    const roleFallback =
+      (permission === "security:checkin" ||
+        (Array.isArray(permission) && permission.includes("security:checkin"))) &&
+      payload.roles?.includes("Security Officer");
+    if (!ok && !roleFallback) {
       return jsonError("Forbidden", 403);
     }
   }
   return { payload };
 }
 
-/** Pass if user has ANY of the listed permissions */
 export async function requireAnyAuth(
   req: Request,
   permissions: string[]
@@ -42,7 +46,13 @@ export async function requireAnyAuth(
   if (!payload) {
     return jsonError("Unauthorized", 401);
   }
-  if (!hasAnyPermission(payload.permissions, permissions)) {
+  const ok =
+    hasAnyPermission(payload.permissions, permissions) ||
+    (permissions.includes("security:checkin") &&
+      payload.roles?.includes("Security Officer")) ||
+    (permissions.includes("pcm:read") &&
+      payload.roles?.includes("Security Officer"));
+  if (!ok) {
     return jsonError("Forbidden — need one of: " + permissions.join(", "), 403);
   }
   return { payload };

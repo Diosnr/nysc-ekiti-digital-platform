@@ -126,6 +126,7 @@ enum PcmLifecycleStatus {
   MOBILISED
   VERIFIED
   CHECKED_IN
+  CHECKED_OUT
   ACCOMMODATED
   REGISTERED
   BANK_REGISTERED
@@ -191,12 +192,9 @@ model VerificationRecord {
   @@index([verifiedAt])
 }
 
-/// Admin-managed orientation camp locations (for intake dropdowns, etc.)
 model CampAddress {
   id        String   @id @default(cuid())
-  /// Short label shown in dropdowns e.g. "Ekiti Orientation Camp — Ise-Orun"
   name      String
-  /// Full address text
   address   String
   state     String?
   lga       String?

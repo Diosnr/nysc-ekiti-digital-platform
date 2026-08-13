@@ -12,14 +12,24 @@ type Me = {
 };
 
 const nav = [
-  { href: "/staff/dashboard", label: "Dashboard", perm: null },
-  { href: "/staff/security/checkin", label: "Security check-in", perm: "security:checkin" },
-  { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create" },
-  { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
-  { href: "/staff/admin/camp-addresses", label: "Camp addresses", perm: "camp:address:manage" },
-  { href: "/staff/admin/users", label: "Users", perm: "user:read" },
-  { href: "/staff/admin/roles", label: "Roles", perm: "role:read" },
-  { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read" },
+  { href: "/staff/dashboard", label: "Dashboard", perm: null as string | null, hideForSecurityOnly: true },
+  {
+    href: "/staff/security/checkin",
+    label: "Security gate",
+    perm: "security:checkin",
+    hideForSecurityOnly: false,
+  },
+  { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create", hideForSecurityOnly: false },
+  { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read", hideForSecurityOnly: false },
+  {
+    href: "/staff/admin/camp-addresses",
+    label: "Camp addresses",
+    perm: "camp:address:manage",
+    hideForSecurityOnly: false,
+  },
+  { href: "/staff/admin/users", label: "Users", perm: "user:read", hideForSecurityOnly: false },
+  { href: "/staff/admin/roles", label: "Roles", perm: "role:read", hideForSecurityOnly: false },
+  { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read", hideForSecurityOnly: false },
 ];
 
 export function StaffShell({ children }: { children: React.ReactNode }) {
@@ -53,14 +63,32 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   }
 
   const perms = me?.permissions ?? [];
+  const roles = me?.roles ?? [];
+  const securityOnly =
+    roles.includes("Security Officer") &&
+    !roles.includes("Super Admin") &&
+    !perms.includes("user:read") &&
+    !perms.includes("pcm:create");
+
   const can = (p: string | null) =>
     !p ||
     perms.includes(p) ||
     (p === "pcm:create" && perms.includes("pcm:verify")) ||
     (p === "pcm:read" && perms.includes("pcm:search")) ||
+    // Role-name fallback so gate works even before re-seed of JWT
+    (p === "security:checkin" && roles.includes("Security Officer")) ||
+    (p === "pcm:read" && roles.includes("Security Officer")) ||
+    (p === "pcm:search" && roles.includes("Security Officer")) ||
     perms.includes("*");
 
-  const links = nav.filter((n) => can(n.perm));
+  const links = nav.filter((n) => {
+    if (securityOnly && n.hideForSecurityOnly) return false;
+    if (securityOnly && n.href !== "/staff/security/checkin") return false;
+    return can(n.perm);
+  });
+
+  // Security-only: no secondary nav clutter — just header + content
+  const showNav = !securityOnly && links.length > 0;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -72,14 +100,16 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="leading-tight">
               <div className="text-sm font-bold tracking-wide">NYSC Ekiti</div>
-              <div className="text-[11px] text-white/80">Staff operations</div>
+              <div className="text-[11px] text-white/80">
+                {securityOnly ? "Security gate" : "Staff operations"}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right text-sm sm:block">
               <div className="font-medium">{me ? me.user.name || me.user.email : "…"}</div>
               <div className="text-[11px] text-white/75">
-                {me?.roles?.slice(0, 2).join(" · ") || "Signed in"}
+                {roles.slice(0, 2).join(" · ") || "Signed in"}
               </div>
             </div>
             <button
@@ -89,62 +119,66 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
             >
               Logout
             </button>
-            <button
-              type="button"
-              className="rounded-md border border-white/30 p-2 sm:hidden"
-              onClick={() => setMobileOpen((v) => !v)}
-              aria-label="Menu"
-            >
-              <span className="block h-0.5 w-5 bg-white" />
-              <span className="mt-1 block h-0.5 w-5 bg-white" />
-              <span className="mt-1 block h-0.5 w-5 bg-white" />
-            </button>
+            {showNav && (
+              <button
+                type="button"
+                className="rounded-md border border-white/30 p-2 sm:hidden"
+                onClick={() => setMobileOpen((v) => !v)}
+                aria-label="Menu"
+              >
+                <span className="block h-0.5 w-5 bg-white" />
+                <span className="mt-1 block h-0.5 w-5 bg-white" />
+                <span className="mt-1 block h-0.5 w-5 bg-white" />
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      <nav className="border-b border-slate-200 bg-white shadow-sm">
-        <div className="mx-auto hidden max-w-6xl gap-1 px-4 sm:flex sm:px-6">
-          {links.map((n) => {
-            const active =
-              n.href === "/staff/pcm"
-                ? pathname === "/staff/pcm" ||
-                  Boolean(pathname.match(/^\/staff\/pcm\/[^/]+$/))
-                : pathname.startsWith(n.href);
-            return (
-              <Link
-                key={n.href}
-                href={n.href}
-                className={`border-b-2 px-4 py-3 text-sm font-semibold transition ${
-                  active
-                    ? "border-nysc-green text-nysc-green"
-                    : "border-transparent text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {n.label}
-              </Link>
-            );
-          })}
-        </div>
-        {mobileOpen && (
-          <div className="border-t border-slate-100 px-2 py-2 sm:hidden">
-            {links.map((n) => (
-              <Link
-                key={n.href}
-                href={n.href}
-                onClick={() => setMobileOpen(false)}
-                className={`block rounded-md px-3 py-2.5 text-sm font-medium ${
-                  pathname.startsWith(n.href)
-                    ? "bg-green-50 text-nysc-green"
-                    : "text-slate-700"
-                }`}
-              >
-                {n.label}
-              </Link>
-            ))}
+      {showNav && (
+        <nav className="border-b border-slate-200 bg-white shadow-sm">
+          <div className="mx-auto hidden max-w-6xl gap-1 px-4 sm:flex sm:px-6">
+            {links.map((n) => {
+              const active =
+                n.href === "/staff/pcm"
+                  ? pathname === "/staff/pcm" ||
+                    Boolean(pathname.match(/^\/staff\/pcm\/[^/]+$/))
+                  : pathname.startsWith(n.href);
+              return (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className={`border-b-2 px-4 py-3 text-sm font-semibold transition ${
+                    active
+                      ? "border-nysc-green text-nysc-green"
+                      : "border-transparent text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {n.label}
+                </Link>
+              );
+            })}
           </div>
-        )}
-      </nav>
+          {mobileOpen && (
+            <div className="border-t border-slate-100 px-2 py-2 sm:hidden">
+              {links.map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`block rounded-md px-3 py-2.5 text-sm font-medium ${
+                    pathname.startsWith(n.href)
+                      ? "bg-green-50 text-nysc-green"
+                      : "text-slate-700"
+                  }`}
+                >
+                  {n.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </nav>
+      )}
 
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">{children}</div>
     </div>
