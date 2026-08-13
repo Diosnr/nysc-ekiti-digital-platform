@@ -33,11 +33,15 @@ export function PcmIntakeClient() {
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [qrRaw, setQrRaw] = useState("");
-  const [created, setCreated] = useState<{ callUpNumber: string; fullName: string } | null>(null);
+  const [created, setCreated] = useState<{
+    callUpNumber: string;
+    fullName: string;
+  } | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
   const handlingScan = useRef(false);
+  const lastDecodedRef = useRef("");
   const readerId = "pcm-qr-reader";
 
   const stopScanner = useCallback(async () => {
@@ -59,16 +63,27 @@ export function PcmIntakeClient() {
   }, [stopScanner]);
 
   async function submitQrPayload(input: string, data?: FormState) {
+    const payload = input.trim();
+    if (!payload) {
+      setError("No QR content to submit. Scan again or paste the verification link.");
+      return;
+    }
+
+    // Always keep what we are sending visible in the UI
+    lastDecodedRef.current = payload;
+    setQrRaw(payload);
+
     setLoading(true);
     setError(null);
-    setMsg(null);
+    setMsg("Submitting to NYSC Ekiti…");
+
     try {
       const res = await fetch("/api/pcm/intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "qr",
-          input,
+          input: payload,
           data: data
             ? {
                 callUpNumber: data.callUpNumber || undefined,
@@ -83,11 +98,36 @@ export function PcmIntakeClient() {
             : undefined,
         }),
       });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "Intake failed");
+
+      let json: {
+        error?: string;
+        status?: string;
+        message?: string;
+        partial?: { callUpNumber?: string };
+        pcm?: { callUpNumber: string; fullName: string };
+      } = {};
+      try {
+        json = await res.json();
+      } catch {
+        setError(
+          "Server returned an invalid response. If this is a new deploy, run database setup (db push + seed) against Neon first."
+        );
         return;
       }
+
+      if (!res.ok) {
+        const err = json.error ?? `Intake failed (${res.status})`;
+        // Common when Neon tables were never created
+        if (res.status >= 500) {
+          setError(
+            `${err} — Database may not be set up yet. Run prisma db push + seed against your Neon DATABASE_URL.`
+          );
+        } else {
+          setError(err);
+        }
+        return;
+      }
+
       if (json.status === "needs_completion") {
         setMsg(
           json.message ??
@@ -97,19 +137,26 @@ export function PcmIntakeClient() {
           ...f,
           callUpNumber: json.partial?.callUpNumber || f.callUpNumber,
         }));
-        setQrRaw(input);
         setStep("manual");
         await stopScanner();
         return;
       }
-      setCreated({
-        callUpNumber: json.pcm.callUpNumber,
-        fullName: json.pcm.fullName,
-      });
-      setStep("done");
-      await stopScanner();
+
+      if (json.pcm) {
+        setCreated({
+          callUpNumber: json.pcm.callUpNumber,
+          fullName: json.pcm.fullName,
+        });
+        setStep("done");
+        await stopScanner();
+        return;
+      }
+
+      setError("Unexpected response from server.");
     } catch {
-      setError("Network error while submitting scan");
+      setError(
+        "Network error while submitting scan. Check that the site API is running and DATABASE_URL is configured."
+      );
     } finally {
       setLoading(false);
       handlingScan.current = false;
@@ -122,42 +169,54 @@ export function PcmIntakeClient() {
     setStep("qr");
     handlingScan.current = false;
 
-    // Wait for the reader div to mount
-    await new Promise((r) => setTimeout(r, 50));
+    // Let React mount #pcm-qr-reader before html5-qrcode touches it
+    await new Promise((r) => setTimeout(r, 150));
 
     try {
       const { Html5Qrcode } = await import("html5-qrcode");
-      const scanner = new Html5Qrcode(readerId);
+
+      // Clear any leftover DOM from a previous attempt
+      const el = document.getElementById(readerId);
+      if (el) el.innerHTML = "";
+
+      const scanner = new Html5Qrcode(readerId, { verbose: false });
       scannerRef.current = scanner;
 
       await scanner.start(
         { facingMode: "environment" },
         {
-          fps: 10,
+          fps: 8,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const edge = Math.min(viewfinderWidth, viewfinderHeight) * 0.75;
+            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.7);
             return { width: edge, height: edge };
           },
-          aspectRatio: 1,
         },
-        async (decodedText) => {
+        (decodedText) => {
           if (handlingScan.current) return;
+          if (!decodedText || !String(decodedText).trim()) return;
+
           handlingScan.current = true;
-          setQrRaw(decodedText);
-          setMsg("QR detected — verifying…");
-          await stopScanner();
-          await submitQrPayload(decodedText);
+          const text = String(decodedText).trim();
+          lastDecodedRef.current = text;
+          setQrRaw(text);
+          setMsg("QR detected — camera stopping, then verifying…");
+
+          // Stop camera, then submit (use ref so we never lose the string)
+          void (async () => {
+            await stopScanner();
+            await submitQrPayload(lastDecodedRef.current || text);
+          })();
         },
         () => {
-          /* ignore per-frame miss */
+          /* frame miss — ignore */
         }
       );
       setScanning(true);
+      setMsg("Camera on — point at the call-up letter QR.");
     } catch (e) {
-      const message =
-        e instanceof Error ? e.message : "Could not start camera";
+      const message = e instanceof Error ? e.message : "Could not start camera";
       setError(
-        `${message}. Allow camera permission, or paste the QR link/text below, or use manual entry.`
+        `${message}. Allow camera access, or paste the verification link in the box below.`
       );
       setScanning(false);
     }
@@ -168,8 +227,9 @@ export function PcmIntakeClient() {
     setLoading(true);
     setError(null);
     try {
-      if (qrRaw) {
-        await submitQrPayload(qrRaw, form);
+      const fromQr = (lastDecodedRef.current || qrRaw).trim();
+      if (fromQr) {
+        await submitQrPayload(fromQr, form);
         return;
       }
       const res = await fetch("/api/pcm/intake", {
@@ -205,6 +265,8 @@ export function PcmIntakeClient() {
       setLoading(false);
     }
   }
+
+  const scannedDisplay = qrRaw || lastDecodedRef.current;
 
   return (
     <div className="mx-auto max-w-lg">
@@ -245,8 +307,7 @@ export function PcmIntakeClient() {
       {step === "qr" && (
         <div className="space-y-4">
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-black">
-            {/* html5-qrcode mounts its video into this element */}
-            <div id={readerId} className="w-full" />
+            <div id={readerId} className="w-full min-h-[240px]" />
           </div>
           <p className="text-center text-sm text-slate-600">
             {scanning
@@ -255,15 +316,26 @@ export function PcmIntakeClient() {
                 ? "Processing scan…"
                 : "Starting camera…"}
           </p>
+
+          {scannedDisplay ? (
+            <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2">
+              <p className="text-xs font-semibold uppercase text-green-800">Scanned content</p>
+              <p className="mt-1 break-all font-mono text-xs text-slate-800">{scannedDisplay}</p>
+            </div>
+          ) : null}
+
           <p className="text-xs text-slate-500">
-            If the camera cannot read the code, paste the QR link or text below.
+            Camera not reading it? Paste the verification URL (from the QR) below and tap Use link.
           </p>
           <textarea
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            rows={2}
-            placeholder="Paste verification URL or QR text"
+            rows={3}
+            placeholder="https://mgt.nysc.org.ng/verify/CorpMemberVerify.aspx?svc=callup&callup=..."
             value={qrRaw}
-            onChange={(e) => setQrRaw(e.target.value)}
+            onChange={(e) => {
+              setQrRaw(e.target.value);
+              lastDecodedRef.current = e.target.value;
+            }}
           />
           <div className="flex gap-2">
             <button
@@ -272,7 +344,7 @@ export function PcmIntakeClient() {
               onClick={() => void submitQrPayload(qrRaw.trim())}
               className="flex-1 rounded-md bg-nysc-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
-              {loading ? "Verifying…" : "Use pasted QR / link"}
+              {loading ? "Verifying…" : "Use scanned / pasted link"}
             </button>
             <button
               type="button"
@@ -290,9 +362,15 @@ export function PcmIntakeClient() {
 
       {step === "manual" && (
         <form onSubmit={onManual} className="space-y-3">
+          {scannedDisplay ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+              <p className="text-xs font-semibold text-slate-500">QR / link used</p>
+              <p className="mt-1 break-all font-mono text-xs text-slate-700">{scannedDisplay}</p>
+            </div>
+          ) : null}
           <p className="text-sm text-slate-600">
             Enter the details exactly as on your call-up letter
-            {qrRaw ? " (QR was scanned — complete any missing fields)." : "."}
+            {scannedDisplay ? " (complete any fields the scan could not fill)." : "."}
           </p>
           <input
             required
@@ -349,10 +427,7 @@ export function PcmIntakeClient() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setQrRaw("");
-                setStep("choose");
-              }}
+              onClick={() => setStep("choose")}
               className="rounded-md border border-slate-300 px-4 py-2 text-sm"
             >
               Back
@@ -374,6 +449,7 @@ export function PcmIntakeClient() {
             onClick={() => {
               setCreated(null);
               setQrRaw("");
+              lastDecodedRef.current = "";
               setForm(emptyForm);
               setMsg(null);
               setError(null);
