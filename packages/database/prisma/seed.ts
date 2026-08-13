@@ -24,6 +24,7 @@ const PERMISSIONS: { key: string; description: string; module: string }[] = [
   { key: "pcm:verify", description: "Run call-up verification / intake", module: "pcm" },
   { key: "pcm:photo:view", description: "View PCM photograph", module: "pcm" },
   { key: "security:checkin", description: "Security check-in / in-out", module: "camp" },
+  { key: "camp:address:manage", description: "Create and manage camp addresses", module: "camp" },
   { key: "accommodation:read", description: "View accommodation", module: "camp" },
   { key: "accommodation:assign", description: "Assign accommodation", module: "camp" },
   { key: "accommodation:change", description: "Change accommodation", module: "camp" },
@@ -62,7 +63,6 @@ const PERMISSIONS: { key: string; description: string; module: string }[] = [
   { key: "dashboard:view", description: "View operational dashboard", module: "reports" },
 ];
 
-/** Baseline permissions for starter roles (Super Admin still configures further). */
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   "Security Officer": [
     "dashboard:view",
@@ -96,7 +96,6 @@ async function main() {
   const allPerms = await prisma.permission.findMany();
   const byKey = Object.fromEntries(allPerms.map((p) => [p.key, p.id]));
 
-  console.log("Seeding Super Admin role…");
   const superRole = await prisma.role.upsert({
     where: { name: "Super Admin" },
     create: {
@@ -137,9 +136,7 @@ async function main() {
       create: { ...r, isSystem: false, isActive: true },
       update: { description: r.description },
     });
-
-    const keys = ROLE_PERMISSIONS[r.name] ?? [];
-    for (const key of keys) {
+    for (const key of ROLE_PERMISSIONS[r.name] ?? []) {
       const permissionId = byKey[key];
       if (!permissionId) continue;
       await prisma.rolePermission.upsert({
@@ -152,11 +149,28 @@ async function main() {
     }
   }
 
+  // Default Ekiti camp if none exist
+  const campCount = await prisma.campAddress.count();
+  if (campCount === 0) {
+    await prisma.campAddress.create({
+      data: {
+        name: "NYSC Ekiti Orientation Camp",
+        address:
+          "NYSC Permanent Orientation Camp, Ise-Orun / Ekiti State (confirm official address with secretariat)",
+        state: "Ekiti",
+        lga: "Ise/Orun",
+        isActive: true,
+        sortOrder: 0,
+        notes: "Placeholder — Super Admin should update to the official camp address.",
+      },
+    });
+    console.log("Seeded default Ekiti camp address (update via admin UI).");
+  }
+
   const email = process.env.SEED_SUPER_ADMIN_EMAIL ?? "admin@nysc-ekiti.local";
   const password = process.env.SEED_SUPER_ADMIN_PASSWORD ?? "ChangeMeNow!123";
   const passwordHash = await bcrypt.hash(password, 12);
 
-  console.log("Seeding Super Admin user…");
   const admin = await prisma.user.upsert({
     where: { email },
     create: {
@@ -166,10 +180,7 @@ async function main() {
       isActive: true,
       activatedAt: new Date(),
     },
-    update: {
-      passwordHash,
-      isActive: true,
-    },
+    update: { passwordHash, isActive: true },
   });
 
   await prisma.userRole.upsert({

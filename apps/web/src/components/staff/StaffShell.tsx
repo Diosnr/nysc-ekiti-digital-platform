@@ -16,6 +16,7 @@ const nav = [
   { href: "/staff/security/checkin", label: "Security check-in", perm: "security:checkin" },
   { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create" },
   { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
+  { href: "/staff/admin/camp-addresses", label: "Camp addresses", perm: "camp:address:manage" },
   { href: "/staff/admin/users", label: "Users", perm: "user:read" },
   { href: "/staff/admin/roles", label: "Roles", perm: "role:read" },
   { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read" },
