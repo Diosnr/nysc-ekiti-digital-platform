@@ -2,7 +2,6 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { staffFetch } from "@/lib/staff-api";
 
@@ -40,7 +39,6 @@ const empty: Fields = {
 type Step = "scan" | "form" | "done";
 
 export default function StaffPcmIntakePage() {
-  const router = useRouter();
   const [step, setStep] = useState<Step>("scan");
   const [form, setForm] = useState<Fields>(empty);
   const [error, setError] = useState<string | null>(null);
@@ -405,7 +403,7 @@ export default function StaffPcmIntakePage() {
             </button>
             <button
               type="button"
-n              onClick={() => {
+              onClick={() => {
                 void stopScanner();
                 setStep("scan");
                 setError(null);
