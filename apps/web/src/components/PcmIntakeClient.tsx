@@ -69,13 +69,11 @@ export function PcmIntakeClient() {
       return;
     }
 
-    // Always keep what we are sending visible in the UI
     lastDecodedRef.current = payload;
     setQrRaw(payload);
-
     setLoading(true);
     setError(null);
-    setMsg("Submitting to NYSC Ekiti…");
+    setMsg("Fetching call-up details from NYSC verification page…");
 
     try {
       const res = await fetch("/api/pcm/intake", {
@@ -103,39 +101,36 @@ export function PcmIntakeClient() {
         error?: string;
         status?: string;
         message?: string;
-        partial?: { callUpNumber?: string };
+        partial?: Partial<FormState>;
         pcm?: { callUpNumber: string; fullName: string };
       } = {};
       try {
         json = await res.json();
       } catch {
         setError(
-          "Server returned an invalid response. If this is a new deploy, run database setup (db push + seed) against Neon first."
+          "Server returned an invalid response. Ensure Neon DB is set up (db push + seed)."
         );
         return;
       }
 
       if (!res.ok) {
-        const err = json.error ?? `Intake failed (${res.status})`;
-        // Common when Neon tables were never created
-        if (res.status >= 500) {
-          setError(
-            `${err} — Database may not be set up yet. Run prisma db push + seed against your Neon DATABASE_URL.`
-          );
-        } else {
-          setError(err);
-        }
+        setError(json.error ?? `Intake failed (${res.status})`);
+        // Still offer manual form with whatever we can
+        setStep("manual");
+        await stopScanner();
         return;
       }
 
       if (json.status === "needs_completion") {
-        setMsg(
-          json.message ??
-            "QR scanned. Confirm your call-up number and full name from the letter."
-        );
+        setMsg(json.message ?? "Confirm your details from the call-up letter.");
         setForm((f) => ({
           ...f,
           callUpNumber: json.partial?.callUpNumber || f.callUpNumber,
+          fullName: json.partial?.fullName || f.fullName,
+          gender: json.partial?.gender || f.gender,
+          institution: json.partial?.institution || f.institution,
+          course: json.partial?.course || f.course,
+          stateCode: json.partial?.stateCode || f.stateCode,
         }));
         setStep("manual");
         await stopScanner();
@@ -147,6 +142,7 @@ export function PcmIntakeClient() {
           callUpNumber: json.pcm.callUpNumber,
           fullName: json.pcm.fullName,
         });
+        setMsg(null);
         setStep("done");
         await stopScanner();
         return;
@@ -154,9 +150,7 @@ export function PcmIntakeClient() {
 
       setError("Unexpected response from server.");
     } catch {
-      setError(
-        "Network error while submitting scan. Check that the site API is running and DATABASE_URL is configured."
-      );
+      setError("Network error while submitting scan.");
     } finally {
       setLoading(false);
       handlingScan.current = false;
@@ -169,13 +163,10 @@ export function PcmIntakeClient() {
     setStep("qr");
     handlingScan.current = false;
 
-    // Let React mount #pcm-qr-reader before html5-qrcode touches it
     await new Promise((r) => setTimeout(r, 150));
 
     try {
       const { Html5Qrcode } = await import("html5-qrcode");
-
-      // Clear any leftover DOM from a previous attempt
       const el = document.getElementById(readerId);
       if (el) el.innerHTML = "";
 
@@ -187,7 +178,9 @@ export function PcmIntakeClient() {
         {
           fps: 8,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.7);
+            const edge = Math.floor(
+              Math.min(viewfinderWidth, viewfinderHeight) * 0.7
+            );
             return { width: edge, height: edge };
           },
         },
@@ -199,24 +192,21 @@ export function PcmIntakeClient() {
           const text = String(decodedText).trim();
           lastDecodedRef.current = text;
           setQrRaw(text);
-          setMsg("QR detected — camera stopping, then verifying…");
+          setMsg("QR detected — fetching NYSC call-up details…");
 
-          // Stop camera, then submit (use ref so we never lose the string)
           void (async () => {
             await stopScanner();
             await submitQrPayload(lastDecodedRef.current || text);
           })();
         },
-        () => {
-          /* frame miss — ignore */
-        }
+        () => {}
       );
       setScanning(true);
       setMsg("Camera on — point at the call-up letter QR.");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not start camera";
       setError(
-        `${message}. Allow camera access, or paste the verification link in the box below.`
+        `${message}. Allow camera access, or paste the verification link below.`
       );
       setScanning(false);
     }
@@ -228,7 +218,8 @@ export function PcmIntakeClient() {
     setError(null);
     try {
       const fromQr = (lastDecodedRef.current || qrRaw).trim();
-      if (fromQr) {
+      // Prefer QR+completion merge when we still have the scanned URL
+      if (fromQr && /nysc\.org\.ng/i.test(fromQr)) {
         await submitQrPayload(fromQr, form);
         return;
       }
@@ -284,8 +275,8 @@ export function PcmIntakeClient() {
       {step === "choose" && (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            Register with your NYSC call-up letter. Scan the QR code on the letter — you stay on this
-            NYSC Ekiti site; you are not sent away to another page.
+            Register with your NYSC call-up letter. Scan the QR — we fetch your details from the
+            official NYSC verification page. You stay on this site.
           </p>
           <button
             type="button"
@@ -313,7 +304,7 @@ export function PcmIntakeClient() {
             {scanning
               ? "Point your camera at the QR on your call-up letter…"
               : loading
-                ? "Processing scan…"
+                ? "Fetching NYSC details…"
                 : "Starting camera…"}
           </p>
 
@@ -324,13 +315,10 @@ export function PcmIntakeClient() {
             </div>
           ) : null}
 
-          <p className="text-xs text-slate-500">
-            Camera not reading it? Paste the verification URL (from the QR) below and tap Use link.
-          </p>
           <textarea
             className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             rows={3}
-            placeholder="https://mgt.nysc.org.ng/verify/CorpMemberVerify.aspx?svc=callup&callup=..."
+            placeholder="Or paste: https://mgt.nysc.org.ng/verify/CorpMemberVerify.aspx?svc=callup&callup=..."
             value={qrRaw}
             onChange={(e) => {
               setQrRaw(e.target.value);
@@ -344,7 +332,7 @@ export function PcmIntakeClient() {
               onClick={() => void submitQrPayload(qrRaw.trim())}
               className="flex-1 rounded-md bg-nysc-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
-              {loading ? "Verifying…" : "Use scanned / pasted link"}
+              {loading ? "Fetching…" : "Use scanned / pasted link"}
             </button>
             <button
               type="button"
@@ -369,8 +357,9 @@ export function PcmIntakeClient() {
             </div>
           ) : null}
           <p className="text-sm text-slate-600">
-            Enter the details exactly as on your call-up letter
-            {scannedDisplay ? " (complete any fields the scan could not fill)." : "."}
+            {form.fullName
+              ? "Review pre-filled details, add phone/email if needed, then complete."
+              : "Enter details exactly as on your call-up letter."}
           </p>
           <input
             required

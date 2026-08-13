@@ -1,12 +1,8 @@
 /**
  * NYSC Call-up Verification Adapter
  *
- * Real call-up letter QR codes encode URLs like:
+ * Real call-up QR codes encode:
  * https://mgt.nysc.org.ng/verify/CorpMemberVerify.aspx?svc=callup&callup=<token>
- *
- * The public verification page returns HTML with authenticated fields.
- * We fetch that page server-side and normalize fields so the PCM never
- * leaves the NYSC Ekiti platform.
  */
 
 export interface VerifiedCallUpData {
@@ -79,7 +75,6 @@ function mapFields(
   };
 }
 
-/** Manual JSON / form payload */
 export class ManualVerificationAdapter implements CallUpVerificationAdapter {
   async verify(input: string): Promise<VerifiedCallUpData> {
     let data: Record<string, unknown>;
@@ -94,16 +89,11 @@ export class ManualVerificationAdapter implements CallUpVerificationAdapter {
   }
 }
 
-/**
- * Parse the official NYSC CorpMemberVerify.aspx HTML.
- * Label/value pairs appear as consecutive text nodes after stripping tags.
- */
 export function parseNyscVerifyHtml(html: string): Record<string, string> {
   const withoutScripts = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ");
 
-  // Photograph: prefer corps member photo (large data URI), skip tiny logos
   const imgMatch = withoutScripts.match(
     /<img[^>]+src=["'](data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+)["']/i
   );
@@ -140,62 +130,76 @@ export function parseNyscVerifyHtml(html: string): Record<string, string> {
     const key = labelMap[lines[i].toLowerCase()];
     if (key && !out[key]) {
       const value = lines[i + 1];
-      // skip if next line is another known label
       if (!labelMap[value.toLowerCase()]) {
         out[key] = value;
       }
     }
   }
 
-  // Authenticated banner check (soft)
-  const authenticated =
-    /call-up letter has been authenticated/i.test(plain) ||
-    /\bVerified\b/i.test(plain);
-  out._authenticated = authenticated ? "true" : "false";
+  out._authenticated =
+    /call-up letter has been authenticated/i.test(plain) || /\bVerified\b/i.test(plain)
+      ? "true"
+      : "false";
 
   return out;
+}
+
+/** Extract a NYSC verify URL from noisy scan text */
+export function extractNyscVerifyUrl(input: string): string | null {
+  const trimmed = input.trim();
+
+  // Full URL somewhere in the string
+  const match = trimmed.match(
+    /https?:\/\/[^\s"'<>]*nysc\.org\.ng[^\s"'<>]*CorpMemberVerify\.aspx[^\s"'<>]*/i
+  );
+  if (match) {
+    return match[0].replace(/[.,;)]+$/, "");
+  }
+
+  // Already a clean URL
+  if (/^https?:\/\//i.test(trimmed) && /nysc\.org\.ng/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
 }
 
 function isNyscVerifyUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    return (
-      /nysc\.org\.ng$/i.test(u.hostname) &&
-      /CorpMemberVerify\.aspx/i.test(u.pathname)
-    );
+    const hostOk = /nysc\.org\.ng$/i.test(u.hostname);
+    const pathOk = /CorpMemberVerify\.aspx/i.test(u.pathname);
+    const hasCallup = u.searchParams.has("callup") || u.searchParams.has("callUp");
+    return hostOk && (pathOk || hasCallup);
   } catch {
     return false;
   }
 }
 
-/**
- * QR / URL adapter — handles real NYSC verification links by default.
- */
 export class QrPayloadAdapter implements CallUpVerificationAdapter {
   constructor(private allowGenericRemote: boolean) {}
 
   async verify(input: string): Promise<VerifiedCallUpData> {
     const trimmed = input.trim();
 
-    // 1) JSON embedded in QR
     if (trimmed.startsWith("{")) {
       const data = JSON.parse(trimmed) as Record<string, unknown>;
       return mapFields(data, "qr_payload");
     }
 
-    // 2) URL
-    if (/^https?:\/\//i.test(trimmed)) {
-      // Official NYSC call-up verification page (what real QRs encode)
-      if (isNyscVerifyUrl(trimmed)) {
-        return this.verifyNyscPage(trimmed);
-      }
+    // Prefer extracting official NYSC verify URL from scan noise
+    const nyscUrl = extractNyscVerifyUrl(trimmed);
+    if (nyscUrl || isNyscVerifyUrl(trimmed)) {
+      return this.verifyNyscPage(nyscUrl || trimmed);
+    }
 
+    if (/^https?:\/\//i.test(trimmed)) {
       if (this.allowGenericRemote) {
         const res = await fetch(trimmed, {
           headers: {
             Accept: "application/json, text/html",
             "User-Agent":
-              "NYSC-Ekiti-CIS/1.0 (call-up verification; +https://nysc.gov.ng)",
+              "Mozilla/5.0 (compatible; NYSC-Ekiti-CIS/1.0; call-up verification)",
           },
           redirect: "follow",
         });
@@ -207,62 +211,63 @@ export class QrPayloadAdapter implements CallUpVerificationAdapter {
           const data = (await res.json()) as Record<string, unknown>;
           return mapFields(data, "official_api");
         }
+        // Try NYSC-style HTML parse as fallback
+        const html = await res.text();
+        const parsed = parseNyscVerifyHtml(html);
+        if (parsed.fullName && parsed.callUpNumber) {
+          return mapFields(parsed, "nysc_verify_page");
+        }
         throw new Error(
-          "Verification URL returned HTML that is not a known NYSC verify page. Use manual entry."
+          "Could not read call-up details from that URL. Enter details manually."
         );
       }
 
-      const url = new URL(trimmed);
-      const guess =
-        url.searchParams.get("callup") ||
-        url.searchParams.get("callUpNumber") ||
-        url.searchParams.get("id") ||
-        "";
-      return {
-        callUpNumber: guess || `PENDING-${Date.now()}`,
-        fullName: "PENDING_VERIFICATION",
-        raw: { verificationUrl: trimmed },
-        verifiedAt: new Date(),
-        source: "qr_payload",
-      };
+      throw new Error(
+        "Scanned a URL that is not a recognized NYSC call-up verification link. Paste the full mgt.nysc.org.ng verify link or enter details manually."
+      );
     }
 
-    // 3) Plain string
     if (trimmed.length >= 4) {
-      return {
-        callUpNumber: trimmed,
-        fullName: "PENDING_VERIFICATION",
-        raw: { plain: trimmed },
-        verifiedAt: new Date(),
-        source: "qr_payload",
-      };
+      // Plain token / call-up string — cannot resolve identity without the verify page
+      throw new Error(
+        "Scanned text is not a full NYSC verification URL. Open the QR link or enter call-up number and name manually."
+      );
     }
 
     throw new Error("Unrecognized QR payload. Enter details manually.");
   }
 
   private async verifyNyscPage(url: string): Promise<VerifiedCallUpData> {
-    const res = await fetch(url, {
-      headers: {
-        Accept: "text/html",
-        "User-Agent":
-          "Mozilla/5.0 (compatible; NYSC-Ekiti-CIS/1.0; call-up letter verification)",
-      },
-      redirect: "follow",
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+        redirect: "follow",
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "network error";
+      throw new Error(
+        `Could not reach NYSC verification page (${msg}). Check server network or enter details manually.`
+      );
+    }
+
     if (!res.ok) {
       throw new Error(`NYSC verification page returned HTTP ${res.status}`);
     }
+
     const html = await res.text();
     const parsed = parseNyscVerifyHtml(html);
 
     if (!parsed.fullName || !parsed.callUpNumber) {
       throw new Error(
-        "Could not read name/call-up from NYSC verification page. Enter details manually."
+        "NYSC page loaded but name/call-up number could not be read. Enter details manually."
       );
     }
 
-    // Prefer deployment state as operational state; keep stateCode for business key later
     return mapFields(
       {
         callUpNumber: parsed.callUpNumber,

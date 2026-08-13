@@ -7,8 +7,7 @@ import { hasPermission } from "@nysc/auth";
 
 /**
  * POST /api/pcm/intake
- * Public self-service OR staff-assisted.
- * QR mode accepts real NYSC CorpMemberVerify.aspx URLs and fills identity from the page.
+ * QR mode: fetch NYSC CorpMemberVerify page and create PCM with prefilled fields.
  */
 export async function POST(req: Request) {
   try {
@@ -35,36 +34,35 @@ export async function POST(req: Request) {
       return jsonError("Missing intake data or QR payload");
     }
 
-    const verified = await adapter.verify(input);
-
-    const needsCompletion =
-      verified.fullName === "PENDING_VERIFICATION" ||
-      verified.callUpNumber.startsWith("PENDING-");
-
-    if (needsCompletion && mode === "qr" && !body.data?.fullName) {
-      return jsonOk({
-        status: "needs_completion",
-        partial: {
-          callUpNumber: verified.callUpNumber.startsWith("PENDING-")
-            ? ""
-            : verified.callUpNumber,
-          verificationUrl:
-            verified.raw && typeof verified.raw === "object"
-              ? (verified.raw as { verificationUrl?: string }).verificationUrl
-              : undefined,
-          source: verified.source,
-        },
-        message:
-          "QR scanned. Confirm call-up number and full name from your call-up letter to finish registration.",
-      });
+    let verified;
+    try {
+      verified = await adapter.verify(input);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Verification failed";
+      // Client can still complete manually; return structured failure
+      return jsonError(message, 422);
     }
 
+    // Merge optional manual overrides (e.g. phone) on top of verified page data
     const callUpNumber = String(
       body.data?.callUpNumber || verified.callUpNumber
     ).trim();
     const fullName = String(body.data?.fullName || verified.fullName).trim();
+
     if (!callUpNumber || !fullName || fullName === "PENDING_VERIFICATION") {
-      return jsonError("callUpNumber and fullName are required");
+      return jsonOk({
+        status: "needs_completion",
+        partial: {
+          callUpNumber: callUpNumber.startsWith("PENDING-") ? "" : callUpNumber,
+          fullName: fullName === "PENDING_VERIFICATION" ? "" : fullName,
+          gender: verified.gender,
+          institution: verified.institution,
+          course: verified.course,
+          stateCode: verified.stateCode || verified.deploymentState,
+        },
+        message:
+          "Could not complete identity from QR alone. Confirm call-up number and full name from your letter.",
+      });
     }
 
     const existing = await prisma.pcm.findUnique({ where: { callUpNumber } });
@@ -106,11 +104,16 @@ export async function POST(req: Request) {
                 ? String(body.input ?? body.qrPayload ?? "").slice(0, 500)
                 : "manual",
             rawJson: JSON.stringify({
-              ...verified.raw,
               source: verified.source,
               deploymentState: verified.deploymentState,
               campAddress: verified.campAddress,
               batchYear: verified.batchYear,
+              verificationUrl:
+                verified.raw &&
+                typeof verified.raw === "object" &&
+                "verificationUrl" in verified.raw
+                  ? (verified.raw as { verificationUrl?: string }).verificationUrl
+                  : undefined,
             }),
             verifiedAt: verified.verifiedAt,
           },
@@ -148,7 +151,7 @@ export async function POST(req: Request) {
           institution: pcm.institution,
           stateCode: pcm.stateCode,
           status: pcm.status,
-          photographUrl: pcm.photographUrl ? "[photo stored]" : null,
+          hasPhoto: Boolean(pcm.photographUrl),
         },
       },
       201
@@ -156,6 +159,13 @@ export async function POST(req: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Intake failed";
     console.error("pcm intake", e);
+    // Prisma table missing, etc.
+    if (/P1001|P2021|does not exist|Can't reach database/i.test(message)) {
+      return jsonError(
+        "Database not ready. Run prisma db push + seed against your Neon DATABASE_URL.",
+        503
+      );
+    }
     return jsonError(message, 400);
   }
 }
