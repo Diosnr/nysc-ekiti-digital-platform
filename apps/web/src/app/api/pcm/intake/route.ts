@@ -4,11 +4,8 @@ import { jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { createVerificationAdapter } from "@nysc/verification";
 import { hasPermission } from "@nysc/auth";
+import { uploadDataUriToCloudinary } from "@/lib/cloudinary";
 
-/**
- * POST /api/pcm/intake
- * QR mode: fetch NYSC CorpMemberVerify page and create PCM with prefilled fields.
- */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -39,11 +36,9 @@ export async function POST(req: Request) {
       verified = await adapter.verify(input);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Verification failed";
-      // Client can still complete manually; return structured failure
       return jsonError(message, 422);
     }
 
-    // Merge optional manual overrides (e.g. phone) on top of verified page data
     const callUpNumber = String(
       body.data?.callUpNumber || verified.callUpNumber
     ).trim();
@@ -59,6 +54,9 @@ export async function POST(req: Request) {
           institution: verified.institution,
           course: verified.course,
           stateCode: verified.stateCode || verified.deploymentState,
+          deploymentState: verified.deploymentState,
+          dateReporting: verified.dateReporting,
+          batchYear: verified.batchYear,
         },
         message:
           "Could not complete identity from QR alone. Confirm call-up number and full name from your letter.",
@@ -73,6 +71,27 @@ export async function POST(req: Request) {
       );
     }
 
+    // Photo: upload base64 to Cloudinary; store URL only
+    let photographUrl: string | null =
+      body.data?.photographUrl || verified.photographUrl || null;
+    if (photographUrl?.startsWith("data:image")) {
+      const uploaded = await uploadDataUriToCloudinary(
+        photographUrl,
+        callUpNumber
+      );
+      photographUrl = uploaded;
+    }
+
+    const deploymentState =
+      body.data?.deploymentState ||
+      verified.deploymentState ||
+      verified.stateCode ||
+      null;
+    const batchYear = body.data?.batchYear || verified.batchYear || null;
+    const dateReporting =
+      body.data?.dateReporting || verified.dateReporting || null;
+    const campAddress = body.data?.campAddress || verified.campAddress || null;
+
     const pcm = await prisma.pcm.create({
       data: {
         callUpNumber,
@@ -80,20 +99,15 @@ export async function POST(req: Request) {
         gender: body.data?.gender || verified.gender,
         institution: body.data?.institution || verified.institution,
         course: body.data?.course || verified.course,
-        photographUrl: body.data?.photographUrl || verified.photographUrl,
-        stateCode:
-          body.data?.stateCode ||
-          verified.stateCode ||
-          verified.deploymentState,
+        photographUrl,
+        deploymentState,
+        stateCode: deploymentState,
+        campAddress,
+        dateReporting,
+        batchYear,
+        stream: batchYear,
         phone: body.data?.phone || verified.phone,
         email: body.data?.email || verified.email,
-        stream: verified.batchYear,
-        notes: [
-          verified.campAddress && `Camp: ${verified.campAddress}`,
-          verified.dateReporting && `Report: ${verified.dateReporting}`,
-        ]
-          .filter(Boolean)
-          .join(" | ") || undefined,
         status: "VERIFIED",
         createdById: payload?.sub,
         verifications: {
@@ -105,15 +119,11 @@ export async function POST(req: Request) {
                 : "manual",
             rawJson: JSON.stringify({
               source: verified.source,
-              deploymentState: verified.deploymentState,
-              campAddress: verified.campAddress,
-              batchYear: verified.batchYear,
-              verificationUrl:
-                verified.raw &&
-                typeof verified.raw === "object" &&
-                "verificationUrl" in verified.raw
-                  ? (verified.raw as { verificationUrl?: string }).verificationUrl
-                  : undefined,
+              deploymentState,
+              campAddress,
+              batchYear,
+              dateReporting,
+              hasPhoto: Boolean(photographUrl),
             }),
             verifiedAt: verified.verifiedAt,
           },
@@ -133,8 +143,11 @@ export async function POST(req: Request) {
       after: {
         callUpNumber: pcm.callUpNumber,
         fullName: pcm.fullName,
+        deploymentState: pcm.deploymentState,
+        batchYear: pcm.batchYear,
+        dateReporting: pcm.dateReporting,
+        hasPhoto: Boolean(pcm.photographUrl),
         source: verified.source,
-        mode,
       },
       ip: meta.ip,
       userAgent: meta.userAgent,
@@ -149,9 +162,12 @@ export async function POST(req: Request) {
           fullName: pcm.fullName,
           gender: pcm.gender,
           institution: pcm.institution,
-          stateCode: pcm.stateCode,
+          deploymentState: pcm.deploymentState,
+          campAddress: pcm.campAddress,
+          dateReporting: pcm.dateReporting,
+          batchYear: pcm.batchYear,
+          photographUrl: pcm.photographUrl,
           status: pcm.status,
-          hasPhoto: Boolean(pcm.photographUrl),
         },
       },
       201
@@ -159,7 +175,6 @@ export async function POST(req: Request) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Intake failed";
     console.error("pcm intake", e);
-    // Prisma table missing, etc.
     if (/P1001|P2021|does not exist|Can't reach database/i.test(message)) {
       return jsonError(
         "Database not ready. Run prisma db push + seed against your Neon DATABASE_URL.",

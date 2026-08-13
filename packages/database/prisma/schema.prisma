@@ -1,6 +1,4 @@
 // NYSC Ekiti Digital Platform — Prisma Schema
-// Phase 2: Identity + RBAC + Audit
-// Phase 3: PCM (central aggregate) + verification records
 
 generator client {
   provider = "prisma-client-js"
@@ -11,33 +9,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------------------------
-// Identity
-// ---------------------------------------------------------------------------
-
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
-  name              String?
-  passwordHash      String?
-  phone             String?
-  gradeLevel        String?
-  rank              String?
-  post              String?
-  lgaCode           String?
-  zoneCode          String?
-  isActive          Boolean   @default(true)
-  activationToken   String?
-  activationSentAt  DateTime?
-  activatedAt       DateTime?
-  lastLoginAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  email            String    @unique
+  name             String?
+  passwordHash     String?
+  phone            String?
+  gradeLevel       String?
+  rank             String?
+  post             String?
+  lgaCode          String?
+  zoneCode         String?
+  isActive         Boolean   @default(true)
+  activationToken  String?
+  activationSentAt DateTime?
+  activatedAt      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  roles             UserRole[]
-  auditLogs         AuditLog[] @relation("AuditActor")
-  refreshTokens     RefreshToken[]
-  pcmsCreated       Pcm[]      @relation("PcmCreatedBy")
+  roles         UserRole[]
+  auditLogs     AuditLog[]     @relation("AuditActor")
+  refreshTokens RefreshToken[]
+  pcmsCreated   Pcm[]          @relation("PcmCreatedBy")
 
   @@index([lgaCode])
   @@index([zoneCode])
@@ -128,10 +122,6 @@ model AuditLog {
   @@index([createdAt])
 }
 
-// ---------------------------------------------------------------------------
-// Phase 3 — PCM (Prospective / Corps Member) central aggregate
-// ---------------------------------------------------------------------------
-
 enum PcmLifecycleStatus {
   MOBILISED
   VERIFIED
@@ -150,48 +140,54 @@ enum PcmLifecycleStatus {
 }
 
 model Pcm {
-  id              String             @id @default(cuid())
-  /// Call-up / state code — primary business key when available
-  callUpNumber    String             @unique
-  stateCode       String?
-  fullName        String
-  gender          String?
-  dateOfBirth     DateTime?
-  institution     String?
-  course          String?
-  phone           String?
-  email           String?
-  photographUrl   String?
-  /// Deployment / posting geography (filled progressively)
-  lgaCode         String?
-  zoneCode        String?
-  stream          String?
-  originState     String?
-  status          PcmLifecycleStatus @default(VERIFIED)
-  notes           String?
-  createdById     String?
-  createdBy       User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id               String             @id @default(cuid())
+  callUpNumber     String             @unique
+  fullName         String
+  gender           String?
+  dateOfBirth      DateTime?
+  institution      String?
+  course           String?
+  phone            String?
+  email            String?
+  /// Cloudinary (or other CDN) URL — never store huge base64 in DB long-term
+  photographUrl    String?
+  /// State of deployment from NYSC verify page (e.g. Ekiti)
+  deploymentState  String?
+  stateCode        String?
+  campAddress      String?
+  dateReporting    String?
+  batchYear        String?
+  stream           String?
+  originState      String?
+  lgaCode          String?
+  zoneCode         String?
+  status           PcmLifecycleStatus @default(VERIFIED)
+  notes            String?
+  createdById      String?
+  createdBy        User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
-  verifications   VerificationRecord[]
+  verifications VerificationRecord[]
 
   @@index([fullName])
   @@index([stateCode])
+  @@index([deploymentState])
   @@index([lgaCode])
   @@index([zoneCode])
   @@index([status])
+  @@index([batchYear])
 }
 
 model VerificationRecord {
-  id            String   @id @default(cuid())
-  pcmId         String
-  pcm           Pcm      @relation(fields: [pcmId], references: [id], onDelete: Cascade)
-  source        String   // manual | scraping | official_api
-  inputRef      String?  // QR payload or URL used
-  rawJson       String?  // normalized payload snapshot
-  verifiedAt    DateTime @default(now())
-  createdAt     DateTime @default(now())
+  id         String   @id @default(cuid())
+  pcmId      String
+  pcm        Pcm      @relation(fields: [pcmId], references: [id], onDelete: Cascade)
+  source     String
+  inputRef   String?
+  rawJson    String?
+  verifiedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@index([pcmId])
   @@index([verifiedAt])
