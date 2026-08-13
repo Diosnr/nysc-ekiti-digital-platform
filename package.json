@@ -9,13 +9,15 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@nysc/web",
-    "build": "npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build --workspace=@nysc/web",
+    "build": "bash scripts/vercel-build.sh",
     "start": "npm run start --workspace=@nysc/web",
     "db:generate": "npx prisma generate --schema=packages/database/prisma/schema.prisma",
-    "db:migrate": "npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma",
     "db:push": "npx prisma db push --schema=packages/database/prisma/schema.prisma",
     "db:seed": "npm run seed --workspace=@nysc/database",
     "db:studio": "npx prisma studio --schema=packages/database/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
   },
   "engines": {
     "node": ">=20"
