@@ -20,6 +20,8 @@ type Fields = {
   verificationUrl?: string;
 };
 
+type CampOpt = { id: string; name: string; address: string };
+
 const empty: Fields = {
   callUpNumber: "",
   fullName: "",
@@ -48,8 +50,7 @@ function normalizeState(v: string): string {
     (s) =>
       s.toLowerCase() === t ||
       s.toLowerCase().replace(/\s+/g, "") === t.replace(/\s+/g, "") ||
-      (t.includes("abuja") && s === "FCT") ||
-      (t === "fct abuja" && s === "FCT")
+      (t.includes("abuja") && s === "FCT")
   );
   return hit ?? v.trim();
 }
@@ -63,10 +64,21 @@ export default function StaffPcmIntakePage() {
   const [scanning, setScanning] = useState(false);
   const [qrRaw, setQrRaw] = useState("");
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const [camps, setCamps] = useState<CampOpt[]>([]);
 
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
   const handlingScan = useRef(false);
   const readerId = "staff-pcm-qr-reader";
+
+  useEffect(() => {
+    staffFetch("/api/camp-addresses")
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        setCamps(data.campAddresses ?? []);
+      })
+      .catch(() => {});
+  }, []);
 
   const stopScanner = useCallback(async () => {
     try {
@@ -117,13 +129,20 @@ export default function StaffPcmIntakePage() {
       }
       const f = json.fields as Fields;
       const rawDate = f.dateReporting || "";
+      const fromPage = (f.campAddress || "").trim();
+      const matched = camps.find(
+        (c) =>
+          c.address === fromPage ||
+          c.name === fromPage ||
+          (fromPage && c.address.toLowerCase().includes(fromPage.toLowerCase()))
+      );
       setForm({
         callUpNumber: f.callUpNumber || "",
         fullName: f.fullName || "",
         gender: normalizeGender(f.gender || ""),
         institution: f.institution || "",
         deploymentState: normalizeState(f.deploymentState || ""),
-        campAddress: f.campAddress || "",
+        campAddress: matched ? matched.address : fromPage,
         dateReporting: rawDate ? formatReportingDate(rawDate) : "",
         batchYear: f.batchYear || "",
         photographUrl: f.photographUrl || "",
@@ -269,13 +288,17 @@ export default function StaffPcmIntakePage() {
     setStep("form");
   }
 
+  const campSelectValue =
+    camps.find((c) => c.address === form.campAddress)?.address ||
+    (form.campAddress ? "__custom__" : "");
+
   return (
     <StaffShell>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">PCM Intake</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Fields match the NYSC call-up verify page. Photo is required.
+            Gender, state, and camp address use controlled lists. Photo is required.
           </p>
         </div>
         <Link href="/staff/pcm" className="text-sm font-medium text-nysc-green hover:underline">
@@ -365,9 +388,6 @@ export default function StaffPcmIntakePage() {
               <label className="text-sm font-semibold text-slate-800">
                 Photograph <span className="text-red-600">*</span>
               </label>
-              <p className="mt-1 text-xs text-slate-500">
-                From NYSC page when available, or upload. Stored on Cloudinary.
-              </p>
               <input
                 type="file"
                 accept="image/*"
@@ -379,9 +399,7 @@ export default function StaffPcmIntakePage() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold uppercase text-slate-500">
-              Call-up number *
-            </label>
+            <label className="text-xs font-semibold uppercase text-slate-500">Call-up number *</label>
             <input
               required
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -425,9 +443,7 @@ export default function StaffPcmIntakePage() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold uppercase text-slate-500">
-              State of deployment
-            </label>
+            <label className="text-xs font-semibold uppercase text-slate-500">State of deployment</label>
             <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={
@@ -438,9 +454,8 @@ export default function StaffPcmIntakePage() {
                     : ""
               }
               onChange={(e) => {
-                const v = e.target.value;
-                if (v === "__other__") return;
-                setForm({ ...form, deploymentState: v });
+                if (e.target.value === "__other__") return;
+                setForm({ ...form, deploymentState: e.target.value });
               }}
             >
               <option value="">Select state…</option>
@@ -460,12 +475,31 @@ export default function StaffPcmIntakePage() {
 
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">Camp address</label>
-            <input
+            <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={form.campAddress}
-              onChange={(e) => setForm({ ...form, campAddress: e.target.value })}
-              placeholder="From call-up letter / NYSC page"
-            />
+              value={campSelectValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "__custom__") return;
+                setForm({ ...form, campAddress: v });
+              }}
+            >
+              <option value="">Select camp…</option>
+              {camps.map((c) => (
+                <option key={c.id} value={c.address}>
+                  {c.name}
+                </option>
+              ))}
+              {form.campAddress &&
+                !camps.some((c) => c.address === form.campAddress) && (
+                  <option value="__custom__">{form.campAddress} (from letter)</option>
+                )}
+            </select>
+            {camps.length === 0 && (
+              <p className="mt-1 text-xs text-amber-700">
+                No active camps yet. Super Admin: Staff → Camp addresses.
+              </p>
+            )}
           </div>
 
           <div>
