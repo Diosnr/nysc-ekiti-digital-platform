@@ -24,14 +24,9 @@ export function Header() {
       <div className="border-b border-nysc-green bg-nysc-green">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-1.5 text-xs text-white sm:px-6">
           <span>National Youth Service Corps — Ekiti State</span>
-          <div className="flex gap-3">
-            <Link href="/pcm" className="hover:underline">
-              PCM Registration
-            </Link>
-            <Link href="/staff" className="hover:underline">
-              Staff
-            </Link>
-          </div>
+          <Link href="/staff/login" className="hover:underline">
+            Staff login
+          </Link>
         </div>
       </div>
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
@@ -54,12 +49,6 @@ export function Header() {
               {item.label}
             </Link>
           ))}
-          <Link
-            href="/pcm"
-            className="ml-2 rounded-md bg-nysc-green px-3 py-1.5 text-sm font-semibold text-white hover:bg-nysc-green-light"
-          >
-            PCM Register
-          </Link>
         </nav>
         <button
           type="button"
@@ -84,13 +73,6 @@ export function Header() {
               {item.label}
             </Link>
           ))}
-          <Link
-            href="/pcm"
-            className="mt-1 block rounded-md bg-nysc-green px-2 py-2 text-center text-sm font-semibold text-white"
-            onClick={() => setOpen(false)}
-          >
-            PCM Register
-          </Link>
         </nav>
       )}
     </header>

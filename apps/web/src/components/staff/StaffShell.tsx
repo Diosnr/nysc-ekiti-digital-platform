@@ -13,6 +13,7 @@ type Me = {
 
 const nav = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
+  { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create" },
   { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
   { href: "/staff/admin/users", label: "Users", perm: "user:read" },
   { href: "/staff/admin/roles", label: "Roles", perm: "role:read" },
@@ -53,14 +54,14 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   const can = (p: string | null) =>
     !p ||
     perms.includes(p) ||
-    (perms.includes("pcm:search") && p === "pcm:read") ||
+    (p === "pcm:create" && perms.includes("pcm:verify")) ||
+    (p === "pcm:read" && perms.includes("pcm:search")) ||
     perms.includes("*");
 
   const links = nav.filter((n) => can(n.perm));
 
   return (
     <div className="min-h-screen bg-slate-100">
-      {/* Top bar */}
       <header className="border-b border-emerald-900/20 bg-nysc-green text-white shadow-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
@@ -100,11 +101,13 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Secondary nav */}
       <nav className="border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto hidden max-w-6xl gap-1 px-4 sm:flex sm:px-6">
           {links.map((n) => {
-            const active = pathname.startsWith(n.href);
+            const active =
+              n.href === "/staff/pcm"
+                ? pathname === "/staff/pcm" || pathname.match(/^\/staff\/pcm\/[^/]+$/)
+                : pathname.startsWith(n.href);
             return (
               <Link
                 key={n.href}
