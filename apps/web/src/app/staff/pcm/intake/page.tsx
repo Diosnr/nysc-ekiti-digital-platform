@@ -5,19 +5,17 @@ import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { staffFetch } from "@/lib/staff-api";
 
+/** Fields that exist on the official NYSC verify page */
 type Fields = {
   callUpNumber: string;
   fullName: string;
   gender: string;
   institution: string;
-  course: string;
   deploymentState: string;
   campAddress: string;
   dateReporting: string;
   batchYear: string;
   photographUrl: string;
-  phone: string;
-  email: string;
   verificationUrl?: string;
 };
 
@@ -26,14 +24,11 @@ const empty: Fields = {
   fullName: "",
   gender: "",
   institution: "",
-  course: "",
   deploymentState: "",
   campAddress: "",
   dateReporting: "",
   batchYear: "",
   photographUrl: "",
-  phone: "",
-  email: "",
 };
 
 type Step = "scan" | "form" | "done";
@@ -97,9 +92,6 @@ export default function StaffPcmIntakePage() {
         setError(
           `Already registered: ${json.fields?.fullName} (${json.fields?.callUpNumber}). Open registry to view.`
         );
-        if (json.fields) {
-          setForm({ ...empty, ...json.fields });
-        }
         return;
       }
       const f = json.fields as Fields;
@@ -108,18 +100,19 @@ export default function StaffPcmIntakePage() {
         fullName: f.fullName || "",
         gender: f.gender || "",
         institution: f.institution || "",
-        course: f.course || "",
         deploymentState: f.deploymentState || "",
         campAddress: f.campAddress || "",
         dateReporting: f.dateReporting || "",
         batchYear: f.batchYear || "",
         photographUrl: f.photographUrl || "",
-        phone: f.phone || "",
-        email: f.email || "",
         verificationUrl: payload,
       });
       setQrRaw(payload);
-      setMsg("Details loaded from NYSC. Review, ensure photo is present, then save.");
+      setMsg(
+        f.photographUrl
+          ? "Details + photo loaded from NYSC. Review and save."
+          : "Details loaded. Upload a photo (required), then save."
+      );
       setStep("form");
       await stopScanner();
     } catch {
@@ -184,8 +177,7 @@ export default function StaffPcmIntakePage() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const result = String(reader.result || "");
-      setForm((f) => ({ ...f, photographUrl: result }));
+      setForm((f) => ({ ...f, photographUrl: String(reader.result || "") }));
     };
     reader.readAsDataURL(file);
   }
@@ -194,7 +186,7 @@ export default function StaffPcmIntakePage() {
     e.preventDefault();
     setError(null);
     if (!form.photographUrl) {
-      setError("Photo is required. Upload one or re-scan so NYSC photo is loaded.");
+      setError("Photo is required.");
       return;
     }
     if (!form.callUpNumber.trim() || !form.fullName.trim()) {
@@ -214,13 +206,10 @@ export default function StaffPcmIntakePage() {
             fullName: form.fullName.trim(),
             gender: form.gender.trim() || undefined,
             institution: form.institution.trim() || undefined,
-            course: form.course.trim() || undefined,
             deploymentState: form.deploymentState.trim() || undefined,
             campAddress: form.campAddress.trim() || undefined,
             dateReporting: form.dateReporting.trim() || undefined,
             batchYear: form.batchYear.trim() || undefined,
-            phone: form.phone.trim() || undefined,
-            email: form.email.trim() || undefined,
             photographUrl: form.photographUrl,
           },
         }),
@@ -231,6 +220,9 @@ export default function StaffPcmIntakePage() {
         return;
       }
       setCreatedId(json.pcm.id);
+      if (json.pcm.photographUrl) {
+        setForm((f) => ({ ...f, photographUrl: json.pcm.photographUrl }));
+      }
       setStep("done");
       setMsg(null);
     } catch {
@@ -245,7 +237,7 @@ export default function StaffPcmIntakePage() {
     setForm(empty);
     setQrRaw("");
     setError(null);
-    setMsg("Enter details from the call-up letter. Photo upload is required.");
+    setMsg("Enter details from the call-up letter. Photo is required.");
     setStep("form");
   }
 
@@ -255,13 +247,10 @@ export default function StaffPcmIntakePage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">PCM Intake</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Scan call-up QR first. Manual entry is secondary. Photo is required.
+            Fields match the NYSC call-up verify page. Photo is required.
           </p>
         </div>
-        <Link
-          href="/staff/pcm"
-          className="text-sm font-medium text-nysc-green hover:underline"
-        >
+        <Link href="/staff/pcm" className="text-sm font-medium text-nysc-green hover:underline">
           ← Registry
         </Link>
       </div>
@@ -283,11 +272,7 @@ export default function StaffPcmIntakePage() {
             <div id={readerId} className="min-h-[260px] w-full" />
           </div>
           <p className="text-center text-sm text-slate-600">
-            {scanning
-              ? "Scanning…"
-              : loading
-                ? "Loading NYSC data…"
-                : "Start camera to scan"}
+            {scanning ? "Scanning…" : loading ? "Loading NYSC data…" : "Start camera to scan"}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -333,7 +318,7 @@ export default function StaffPcmIntakePage() {
           onSubmit={onSave}
           className="mt-6 grid gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:grid-cols-2"
         >
-          <div className="sm:col-span-2 flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row">
             <div className="shrink-0">
               {form.photographUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -353,7 +338,7 @@ export default function StaffPcmIntakePage() {
                 Photograph <span className="text-red-600">*</span>
               </label>
               <p className="mt-1 text-xs text-slate-500">
-                From NYSC page when available, or upload a clear passport photo.
+                From NYSC page when available, or upload. Stored on Cloudinary.
               </p>
               <input
                 type="file"
@@ -371,19 +356,14 @@ export default function StaffPcmIntakePage() {
               ["fullName", "Full name *", true],
               ["gender", "Gender", false],
               ["institution", "Institution", false],
-              ["course", "Course", false],
               ["deploymentState", "State of deployment", false],
               ["campAddress", "Camp address", false],
               ["dateReporting", "Date reporting", false],
               ["batchYear", "Batch / Year", false],
-              ["phone", "Phone", false],
-              ["email", "Email", false],
             ] as [keyof Fields, string, boolean][]
           ).map(([key, label, required]) => (
             <div key={key}>
-              <label className="text-xs font-semibold uppercase text-slate-500">
-                {label}
-              </label>
+              <label className="text-xs font-semibold uppercase text-slate-500">{label}</label>
               <input
                 required={required}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -393,7 +373,7 @@ export default function StaffPcmIntakePage() {
             </div>
           ))}
 
-          <div className="sm:col-span-2 flex flex-wrap gap-2 pt-2">
+          <div className="flex flex-wrap gap-2 pt-2 sm:col-span-2">
             <button
               type="submit"
               disabled={loading}
@@ -421,6 +401,14 @@ export default function StaffPcmIntakePage() {
           <p className="font-semibold text-green-900">PCM registered</p>
           <p className="mt-2 text-lg font-bold text-slate-900">{form.fullName}</p>
           <p className="font-mono text-sm text-slate-600">{form.callUpNumber}</p>
+          {form.photographUrl?.startsWith("http") && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={form.photographUrl}
+              alt=""
+              className="mx-auto mt-4 h-24 w-24 rounded-lg object-cover"
+            />
+          )}
           <div className="mt-6 flex justify-center gap-3">
             {createdId && (
               <Link

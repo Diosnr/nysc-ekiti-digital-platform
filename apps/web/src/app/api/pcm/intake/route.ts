@@ -8,8 +8,8 @@ import { uploadDataUriToCloudinary } from "@/lib/cloudinary";
 
 /**
  * Staff-only PCM intake.
- * - previewOnly: fetch/parse NYSC QR URL and return fields (no DB write)
- * - confirm: create PCM (photo required)
+ * previewOnly: parse NYSC QR page → return fields (no write)
+ * confirm: create PCM (photo required)
  */
 export async function POST(req: Request) {
   try {
@@ -30,7 +30,6 @@ export async function POST(req: Request) {
     const previewOnly = Boolean(body.previewOnly);
     const confirm = Boolean(body.confirm);
 
-    // --- QR preview: scan → return page fields ---
     if (mode === "qr" && (previewOnly || !confirm)) {
       const input = String(body.input ?? body.qrPayload ?? "").trim();
       if (!input) return jsonError("Missing QR payload");
@@ -71,40 +70,31 @@ export async function POST(req: Request) {
           fullName: verified.fullName,
           gender: verified.gender ?? "",
           institution: verified.institution ?? "",
-          course: verified.course ?? "",
           deploymentState:
             verified.deploymentState || verified.stateCode || "",
           campAddress: verified.campAddress ?? "",
           dateReporting: verified.dateReporting ?? "",
           batchYear: verified.batchYear ?? "",
           photographUrl: verified.photographUrl ?? "",
-          phone: verified.phone ?? "",
-          email: verified.email ?? "",
           verificationUrl: input,
           source: verified.source,
         },
       });
     }
 
-    // --- Confirm create (manual or after QR review) ---
     const data = body.data ?? {};
     const callUpNumber = String(data.callUpNumber ?? "").trim();
     const fullName = String(data.fullName ?? "").trim();
     const gender = data.gender ? String(data.gender).trim() : "";
     const institution = data.institution ? String(data.institution).trim() : "";
-    const course = data.course ? String(data.course).trim() : "";
     const deploymentState = data.deploymentState
       ? String(data.deploymentState).trim()
-      : data.stateCode
-        ? String(data.stateCode).trim()
-        : "";
+      : "";
     const campAddress = data.campAddress ? String(data.campAddress).trim() : "";
     const dateReporting = data.dateReporting
       ? String(data.dateReporting).trim()
       : "";
     const batchYear = data.batchYear ? String(data.batchYear).trim() : "";
-    const phone = data.phone ? String(data.phone).trim() : "";
-    const email = data.email ? String(data.email).trim() : "";
 
     if (!callUpNumber || !fullName) {
       return jsonError("Call-up number and full name are required");
@@ -124,18 +114,16 @@ export async function POST(req: Request) {
         callUpNumber
       );
       if (!uploaded) {
-        // Keep data URI only if Cloudinary not configured (dev fallback)
-        if (!process.env.CLOUDINARY_CLOUD_NAME) {
-          // still allow but prefer Cloudinary in production
-          photographUrl = photographUrl.slice(0, 0); // force fail size?
-          return jsonError(
-            "Photo upload failed. Configure Cloudinary (CLOUDINARY_*) or try a smaller image.",
-            400
-          );
-        }
-        return jsonError("Photo upload to Cloudinary failed. Try again.", 400);
+        return jsonError(
+          "Photo upload failed. Check Cloudinary env vars (CLOUDINARY_CLOUD_NAME, API_KEY, API_SECRET) on Vercel, then redeploy.",
+          400
+        );
       }
       photographUrl = uploaded;
+    }
+
+    if (!/^https?:\/\//i.test(photographUrl)) {
+      return jsonError("Invalid photograph URL after upload", 400);
     }
 
     const existing = await prisma.pcm.findUnique({ where: { callUpNumber } });
@@ -152,7 +140,6 @@ export async function POST(req: Request) {
         fullName,
         gender: gender || null,
         institution: institution || null,
-        course: course || null,
         photographUrl,
         deploymentState: deploymentState || null,
         stateCode: deploymentState || null,
@@ -160,8 +147,6 @@ export async function POST(req: Request) {
         dateReporting: dateReporting || null,
         batchYear: batchYear || null,
         stream: batchYear || null,
-        phone: phone || null,
-        email: email || null,
         status: "VERIFIED",
         createdById: payload.sub,
         verifications: {
@@ -171,8 +156,19 @@ export async function POST(req: Request) {
               ? String(body.verificationUrl).slice(0, 500)
               : mode,
             rawJson: JSON.stringify({
-              ...data,
-              photographUrl: photographUrl ? "[stored]" : null,
+              callUpNumber,
+              fullName,
+              deploymentState,
+              batchYear,
+              dateReporting,
+              hasPhoto: true,
+              photoHost: (() => {
+                try {
+                  return new URL(photographUrl!).hostname;
+                } catch {
+                  return "unknown";
+                }
+              })(),
             }),
             verifiedAt: new Date(),
           },
@@ -194,8 +190,7 @@ export async function POST(req: Request) {
         fullName: pcm.fullName,
         deploymentState: pcm.deploymentState,
         batchYear: pcm.batchYear,
-        dateReporting: pcm.dateReporting,
-        hasPhoto: true,
+        photographUrl: pcm.photographUrl,
       },
       ip: meta.ip,
       userAgent: meta.userAgent,
@@ -224,10 +219,7 @@ export async function POST(req: Request) {
     const message = e instanceof Error ? e.message : "Intake failed";
     console.error("pcm intake", e);
     if (/P1001|P2021|does not exist|Can't reach database/i.test(message)) {
-      return jsonError(
-        "Database not ready. Run prisma db push against Neon.",
-        503
-      );
+      return jsonError("Database not ready. Run prisma db push against Neon.", 503);
     }
     return jsonError(message, 400);
   }

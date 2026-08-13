@@ -12,9 +12,6 @@ type Pcm = {
   fullName: string;
   gender?: string | null;
   institution?: string | null;
-  course?: string | null;
-  phone?: string | null;
-  email?: string | null;
   photographUrl?: string | null;
   deploymentState?: string | null;
   stateCode?: string | null;
@@ -22,8 +19,6 @@ type Pcm = {
   dateReporting?: string | null;
   batchYear?: string | null;
   status?: string;
-  lgaCode?: string | null;
-  zoneCode?: string | null;
 };
 
 export default function PcmDetailPage() {
@@ -55,7 +50,7 @@ export default function PcmDetailPage() {
         <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-6 p-6 sm:flex-row">
             <div className="mx-auto shrink-0 sm:mx-0">
-              {pcm.photographUrl ? (
+              {pcm.photographUrl && /^https?:\/\//i.test(pcm.photographUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={pcm.photographUrl}
@@ -82,15 +77,10 @@ export default function PcmDetailPage() {
               [
                 ["Gender", pcm.gender],
                 ["Institution", pcm.institution],
-                ["Course", pcm.course],
                 ["State of deployment", pcm.deploymentState || pcm.stateCode],
                 ["Camp address", pcm.campAddress],
                 ["Date reporting", pcm.dateReporting],
                 ["Batch / Year", pcm.batchYear],
-                ["Phone", pcm.phone],
-                ["Email", pcm.email],
-                ["LGA", pcm.lgaCode],
-                ["Zone", pcm.zoneCode],
               ] as [string, string | null | undefined][]
             ).map(([label, value]) => (
               <div key={label}>
