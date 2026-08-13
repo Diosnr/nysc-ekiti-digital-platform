@@ -13,6 +13,7 @@ type Pcm = {
   institution: string | null;
   status: string;
   stateCode: string | null;
+  deploymentState?: string | null;
 };
 
 export default function PcmRegistryPage() {
@@ -31,16 +32,15 @@ export default function PcmRegistryPage() {
   });
 
   async function load(search?: string) {
+    setError(null);
     const qs = search ? `?q=${encodeURIComponent(search)}` : "";
     const res = await staffFetch(`/api/pcm${qs}`);
-    if (res.status === 403) {
-      setError("You need pcm:read or pcm:search permission.");
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? `Failed to load PCMs (${res.status})`);
       return;
     }
-    if (res.ok) {
-      const data = await res.json();
-      setPcms(data.pcms);
-    }
+    setPcms(data.pcms ?? []);
   }
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function PcmRegistryPage() {
         },
       }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setError(data.error ?? "Intake failed");
       return;
@@ -89,7 +89,7 @@ export default function PcmRegistryPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">PCM Registry</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Intake and search. QR remote verification stays behind adapter until authorized.
+            Search and intake. Public self-service is at /pcm.
           </p>
         </div>
         <button
@@ -169,7 +169,7 @@ export default function PcmRegistryPage() {
       <div className="mt-6 flex gap-2">
         <input
           className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-          placeholder="Search name, call-up, state code…"
+          placeholder="Search name, call-up, state…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load(q)}
@@ -194,10 +194,10 @@ export default function PcmRegistryPage() {
             </tr>
           </thead>
           <tbody>
-            {pcms.length === 0 && (
+            {pcms.length === 0 && !error && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                  No PCM records yet. Use Manual intake or QR when authorized.
+                  No PCM records yet.
                 </td>
               </tr>
             )}

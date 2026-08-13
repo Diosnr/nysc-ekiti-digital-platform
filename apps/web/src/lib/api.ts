@@ -4,6 +4,7 @@ import {
   requirePermissions,
   type AccessTokenPayload,
 } from "./auth-server";
+import { hasPermission, hasAnyPermission } from "@nysc/auth";
 
 export function jsonOk<T>(data: T, status = 200) {
   return NextResponse.json(data, { status });
@@ -21,8 +22,28 @@ export async function requireAuth(
   if (!payload) {
     return jsonError("Unauthorized", 401);
   }
-  if (permission && !requirePermissions(payload, permission)) {
-    return jsonError("Forbidden", 403);
+  if (permission) {
+    const ok = Array.isArray(permission)
+      ? hasPermission(payload.permissions, permission)
+      : hasPermission(payload.permissions, permission);
+    if (!ok) {
+      return jsonError("Forbidden", 403);
+    }
+  }
+  return { payload };
+}
+
+/** Pass if user has ANY of the listed permissions */
+export async function requireAnyAuth(
+  req: Request,
+  permissions: string[]
+): Promise<{ payload: AccessTokenPayload } | NextResponse> {
+  const payload = await getBearerPayload(req.headers.get("authorization"));
+  if (!payload) {
+    return jsonError("Unauthorized", 401);
+  }
+  if (!hasAnyPermission(payload.permissions, permissions)) {
+    return jsonError("Forbidden — need one of: " + permissions.join(", "), 403);
   }
   return { payload };
 }
@@ -36,3 +57,5 @@ export function clientMeta(req: Request) {
     userAgent: req.headers.get("user-agent") ?? undefined,
   };
 }
+
+export { requirePermissions };
