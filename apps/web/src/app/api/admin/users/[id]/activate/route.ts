@@ -5,11 +5,35 @@ import { writeAudit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
-/**
- * Generate an activation token for an officer.
- * Returns a link the admin can send via email/WhatsApp.
- * Actual email/WhatsApp delivery is an external integration (logged as open dependency).
- */
+function appBaseUrl(req: Request): string {
+  const fromEnv = process.env.APP_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+
+  // Vercel provides this without protocol
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) {
+    const host = vercel.replace(/^https?:\/\//, "");
+    return `https://${host}`;
+  }
+
+  // Request origin (works when API is hit on production domain)
+  try {
+    const origin = new URL(req.url).origin;
+    if (origin && !origin.includes("localhost")) return origin;
+  } catch {
+    /* ignore */
+  }
+
+  const forwarded =
+    req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  if (forwarded && !forwarded.includes("localhost")) {
+    return `${proto}://${forwarded}`;
+  }
+
+  return "http://localhost:3000";
+}
+
 export async function POST(req: Request, { params }: Params) {
   const auth = await requireAuth(req, "user:update");
   if (auth instanceof Response) return auth;
@@ -27,7 +51,7 @@ export async function POST(req: Request, { params }: Params) {
     },
   });
 
-  const base = process.env.APP_URL ?? "http://localhost:3000";
+  const base = appBaseUrl(req);
   const activationUrl = `${base}/staff/activate?token=${token}`;
 
   const meta = clientMeta(req);
@@ -38,12 +62,11 @@ export async function POST(req: Request, { params }: Params) {
     action: "user.activation.issue",
     entityType: "User",
     entityId: id,
-    after: { email: user.email, sentAt: new Date().toISOString() },
+    after: { email: user.email, base, sentAt: new Date().toISOString() },
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
 
-  // Delivery channels are external — return link for admin to copy / send.
   return jsonOk({
     activationUrl,
     email: user.email,

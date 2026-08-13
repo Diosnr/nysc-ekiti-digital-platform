@@ -13,6 +13,7 @@ type Me = {
 
 const nav = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
+  { href: "/staff/security/checkin", label: "Security check-in", perm: "security:checkin" },
   { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create" },
   { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
   { href: "/staff/admin/users", label: "Users", perm: "user:read" },
@@ -106,7 +107,8 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
           {links.map((n) => {
             const active =
               n.href === "/staff/pcm"
-                ? pathname === "/staff/pcm" || pathname.match(/^\/staff\/pcm\/[^/]+$/)
+                ? pathname === "/staff/pcm" ||
+                  Boolean(pathname.match(/^\/staff\/pcm\/[^/]+$/))
                 : pathname.startsWith(n.href);
             return (
               <Link
