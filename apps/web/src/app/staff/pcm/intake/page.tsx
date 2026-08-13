@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { staffFetch } from "@/lib/staff-api";
+import { formatReportingDate, toDateInputValue } from "@/lib/dates";
 
 /** Fields that exist on the official NYSC verify page */
 type Fields = {
@@ -95,6 +96,7 @@ export default function StaffPcmIntakePage() {
         return;
       }
       const f = json.fields as Fields;
+      const rawDate = f.dateReporting || "";
       setForm({
         callUpNumber: f.callUpNumber || "",
         fullName: f.fullName || "",
@@ -102,7 +104,7 @@ export default function StaffPcmIntakePage() {
         institution: f.institution || "",
         deploymentState: f.deploymentState || "",
         campAddress: f.campAddress || "",
-        dateReporting: f.dateReporting || "",
+        dateReporting: rawDate ? formatReportingDate(rawDate) : "",
         batchYear: f.batchYear || "",
         photographUrl: f.photographUrl || "",
         verificationUrl: payload,
@@ -195,6 +197,12 @@ export default function StaffPcmIntakePage() {
     }
     setLoading(true);
     try {
+      const dateReporting = form.dateReporting.trim()
+        ? formatReportingDate(
+            toDateInputValue(form.dateReporting) || form.dateReporting
+          )
+        : undefined;
+
       const res = await staffFetch("/api/pcm/intake", {
         method: "POST",
         body: JSON.stringify({
@@ -208,7 +216,7 @@ export default function StaffPcmIntakePage() {
             institution: form.institution.trim() || undefined,
             deploymentState: form.deploymentState.trim() || undefined,
             campAddress: form.campAddress.trim() || undefined,
-            dateReporting: form.dateReporting.trim() || undefined,
+            dateReporting,
             batchYear: form.batchYear.trim() || undefined,
             photographUrl: form.photographUrl,
           },
@@ -358,7 +366,6 @@ export default function StaffPcmIntakePage() {
               ["institution", "Institution", false],
               ["deploymentState", "State of deployment", false],
               ["campAddress", "Camp address", false],
-              ["dateReporting", "Date reporting", false],
               ["batchYear", "Batch / Year", false],
             ] as [keyof Fields, string, boolean][]
           ).map(([key, label, required]) => (
@@ -372,6 +379,28 @@ export default function StaffPcmIntakePage() {
               />
             </div>
           ))}
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Date reporting
+            </label>
+            <input
+              type="date"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={toDateInputValue(form.dateReporting)}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  dateReporting: e.target.value
+                    ? formatReportingDate(e.target.value)
+                    : "",
+                })
+              }
+            />
+            {form.dateReporting && (
+              <p className="mt-1 text-xs text-slate-500">Saved as: {form.dateReporting}</p>
+            )}
+          </div>
 
           <div className="flex flex-wrap gap-2 pt-2 sm:col-span-2">
             <button
