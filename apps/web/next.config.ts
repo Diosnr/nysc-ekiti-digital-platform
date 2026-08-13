@@ -1,15 +1,18 @@
 import type { NextConfig } from "next";
+import path from "path";
 
-/**
- * Static export only when building for GitHub Pages (GITHUB_PAGES=true).
- * Normal / staff / API mode uses the standard Next.js server runtime.
- */
 const isGithubPages = process.env.GITHUB_PAGES === "true";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     unoptimized: true,
+  },
+  // Monorepo local packages
+  transpilePackages: ["@nysc/auth", "@nysc/verification", "@nysc/database"],
+  experimental: {
+    // Allow server to reach outside apps/web for workspace packages
+    externalDir: true,
   },
   ...(isGithubPages
     ? {
