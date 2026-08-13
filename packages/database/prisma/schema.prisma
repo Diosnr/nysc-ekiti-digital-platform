@@ -140,33 +140,31 @@ enum PcmLifecycleStatus {
 }
 
 model Pcm {
-  id               String             @id @default(cuid())
-  callUpNumber     String             @unique
-  fullName         String
-  gender           String?
-  dateOfBirth      DateTime?
-  institution      String?
-  course           String?
-  phone            String?
-  email            String?
-  /// Cloudinary (or other CDN) URL — never store huge base64 in DB long-term
-  photographUrl    String?
-  /// State of deployment from NYSC verify page (e.g. Ekiti)
-  deploymentState  String?
-  stateCode        String?
-  campAddress      String?
-  dateReporting    String?
-  batchYear        String?
-  stream           String?
-  originState      String?
-  lgaCode          String?
-  zoneCode         String?
-  status           PcmLifecycleStatus @default(VERIFIED)
-  notes            String?
-  createdById      String?
-  createdBy        User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id              String             @id @default(cuid())
+  callUpNumber    String             @unique
+  fullName        String
+  gender          String?
+  dateOfBirth     DateTime?
+  institution     String?
+  course          String?
+  phone           String?
+  email           String?
+  photographUrl   String?
+  deploymentState String?
+  stateCode       String?
+  campAddress     String?
+  dateReporting   String?
+  batchYear       String?
+  stream          String?
+  originState     String?
+  lgaCode         String?
+  zoneCode        String?
+  status          PcmLifecycleStatus @default(VERIFIED)
+  notes           String?
+  createdById     String?
+  createdBy       User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   verifications VerificationRecord[]
 
@@ -191,4 +189,24 @@ model VerificationRecord {
 
   @@index([pcmId])
   @@index([verifiedAt])
+}
+
+/// Admin-managed orientation camp locations (for intake dropdowns, etc.)
+model CampAddress {
+  id        String   @id @default(cuid())
+  /// Short label shown in dropdowns e.g. "Ekiti Orientation Camp — Ise-Orun"
+  name      String
+  /// Full address text
+  address   String
+  state     String?
+  lga       String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([state])
+  @@index([sortOrder])
 }
