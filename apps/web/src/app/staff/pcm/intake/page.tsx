@@ -5,8 +5,8 @@ import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { staffFetch } from "@/lib/staff-api";
 import { formatReportingDate, toDateInputValue } from "@/lib/dates";
+import { GENDERS, NIGERIA_STATES } from "@/lib/nigeria";
 
-/** Fields that exist on the official NYSC verify page */
 type Fields = {
   callUpNumber: string;
   fullName: string;
@@ -33,6 +33,26 @@ const empty: Fields = {
 };
 
 type Step = "scan" | "form" | "done";
+
+function normalizeGender(v: string): string {
+  const s = v.trim().toLowerCase();
+  if (s === "m" || s === "male") return "Male";
+  if (s === "f" || s === "female") return "Female";
+  return "";
+}
+
+function normalizeState(v: string): string {
+  const t = v.trim().toLowerCase();
+  if (!t) return "";
+  const hit = NIGERIA_STATES.find(
+    (s) =>
+      s.toLowerCase() === t ||
+      s.toLowerCase().replace(/\s+/g, "") === t.replace(/\s+/g, "") ||
+      (t.includes("abuja") && s === "FCT") ||
+      (t === "fct abuja" && s === "FCT")
+  );
+  return hit ?? v.trim();
+}
 
 export default function StaffPcmIntakePage() {
   const [step, setStep] = useState<Step>("scan");
@@ -100,9 +120,9 @@ export default function StaffPcmIntakePage() {
       setForm({
         callUpNumber: f.callUpNumber || "",
         fullName: f.fullName || "",
-        gender: f.gender || "",
+        gender: normalizeGender(f.gender || ""),
         institution: f.institution || "",
-        deploymentState: f.deploymentState || "",
+        deploymentState: normalizeState(f.deploymentState || ""),
         campAddress: f.campAddress || "",
         dateReporting: rawDate ? formatReportingDate(rawDate) : "",
         batchYear: f.batchYear || "",
@@ -212,9 +232,9 @@ export default function StaffPcmIntakePage() {
           data: {
             callUpNumber: form.callUpNumber.trim(),
             fullName: form.fullName.trim(),
-            gender: form.gender.trim() || undefined,
+            gender: form.gender || undefined,
             institution: form.institution.trim() || undefined,
-            deploymentState: form.deploymentState.trim() || undefined,
+            deploymentState: form.deploymentState || undefined,
             campAddress: form.campAddress.trim() || undefined,
             dateReporting,
             batchYear: form.batchYear.trim() || undefined,
@@ -358,32 +378,107 @@ export default function StaffPcmIntakePage() {
             </div>
           </div>
 
-          {(
-            [
-              ["callUpNumber", "Call-up number *", true],
-              ["fullName", "Full name *", true],
-              ["gender", "Gender", false],
-              ["institution", "Institution", false],
-              ["deploymentState", "State of deployment", false],
-              ["campAddress", "Camp address", false],
-              ["batchYear", "Batch / Year", false],
-            ] as [keyof Fields, string, boolean][]
-          ).map(([key, label, required]) => (
-            <div key={key}>
-              <label className="text-xs font-semibold uppercase text-slate-500">{label}</label>
-              <input
-                required={required}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                value={form[key] || ""}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-              />
-            </div>
-          ))}
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Call-up number *
+            </label>
+            <input
+              required
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={form.callUpNumber}
+              onChange={(e) => setForm({ ...form, callUpNumber: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">Full name *</label>
+            <input
+              required
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={form.fullName}
+              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">Gender</label>
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={form.gender}
+              onChange={(e) => setForm({ ...form, gender: e.target.value })}
+            >
+              <option value="">Select…</option>
+              {GENDERS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">Institution</label>
+            <input
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={form.institution}
+              onChange={(e) => setForm({ ...form, institution: e.target.value })}
+            />
+          </div>
 
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">
-              Date reporting
+              State of deployment
             </label>
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={
+                NIGERIA_STATES.includes(form.deploymentState as (typeof NIGERIA_STATES)[number])
+                  ? form.deploymentState
+                  : form.deploymentState
+                    ? "__other__"
+                    : ""
+              }
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "__other__") return;
+                setForm({ ...form, deploymentState: v });
+              }}
+            >
+              <option value="">Select state…</option>
+              {NIGERIA_STATES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+              {form.deploymentState &&
+                !NIGERIA_STATES.includes(
+                  form.deploymentState as (typeof NIGERIA_STATES)[number]
+                ) && (
+                  <option value="__other__">{form.deploymentState} (from letter)</option>
+                )}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">Camp address</label>
+            <input
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={form.campAddress}
+              onChange={(e) => setForm({ ...form, campAddress: e.target.value })}
+              placeholder="From call-up letter / NYSC page"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">Batch / Year</label>
+            <input
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={form.batchYear}
+              onChange={(e) => setForm({ ...form, batchYear: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">Date reporting</label>
             <input
               type="date"
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -430,14 +525,6 @@ export default function StaffPcmIntakePage() {
           <p className="font-semibold text-green-900">PCM registered</p>
           <p className="mt-2 text-lg font-bold text-slate-900">{form.fullName}</p>
           <p className="font-mono text-sm text-slate-600">{form.callUpNumber}</p>
-          {form.photographUrl?.startsWith("http") && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={form.photographUrl}
-              alt=""
-              className="mx-auto mt-4 h-24 w-24 rounded-lg object-cover"
-            />
-          )}
           <div className="mt-6 flex justify-center gap-3">
             {createdId && (
               <Link
