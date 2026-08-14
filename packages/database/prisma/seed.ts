@@ -37,7 +37,7 @@ const PERMISSIONS: { key: string; description: string; module: string }[] = [
   { key: "platoon:attendance", description: "Record platoon attendance", module: "camp" },
   { key: "kit:issue", description: "Issue kits", module: "camp" },
   { key: "kit:view", description: "View kit status", module: "camp" },
-  { key: "camp:exeat", description: "Camp exeat requests/approvals", module: "camp" },
+  { key: "camp:exeat", description: "Camp exeat / exit grant", module: "camp" },
   { key: "camp:clinic", description: "Camp clinic workflows", module: "camp" },
   { key: "camp:export", description: "Download camp Excel exports", module: "camp" },
   { key: "file:read", description: "View electronic files", module: "files" },
@@ -69,6 +69,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "security:checkin",
     "pcm:read",
     "pcm:search",
+    "pcm:create",
+    "pcm:verify",
     "pcm:photo:view",
   ],
   "Registration Officer": [
@@ -80,6 +82,15 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "pcm:photo:view",
     "registration:complete",
     "camp:export",
+  ],
+  "State Coordinator": [
+    "dashboard:view",
+    "pcm:read",
+    "pcm:search",
+    "pcm:update",
+    "pcm:photo:view",
+    "camp:exeat",
+    "report:view",
   ],
 };
 
@@ -120,7 +131,7 @@ async function main() {
   const starterRoles = [
     { name: "State Coordinator", description: "State secretariat leadership and terminal approvals" },
     { name: "Camp Director", description: "Camp operational oversight, exeats and approvals" },
-    { name: "Security Officer", description: "Camp security check-in and in/out" },
+    { name: "Security Officer", description: "Camp security check-in/out and PCM intake at gate" },
     { name: "Registration Officer", description: "Camp registration committee" },
     { name: "Accommodation Officer", description: "Hostel and bed allocation" },
     { name: "Platoon Officer", description: "Platoon management and attendance" },
@@ -149,7 +160,6 @@ async function main() {
     }
   }
 
-  // Default Ekiti camp if none exist
   const campCount = await prisma.campAddress.count();
   if (campCount === 0) {
     await prisma.campAddress.create({
@@ -164,7 +174,6 @@ async function main() {
         notes: "Placeholder — Super Admin should update to the official camp address.",
       },
     });
-    console.log("Seeded default Ekiti camp address (update via admin UI).");
   }
 
   const email = process.env.SEED_SUPER_ADMIN_EMAIL ?? "admin@nysc-ekiti.local";

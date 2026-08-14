@@ -12,24 +12,22 @@ type Me = {
 };
 
 const nav = [
-  { href: "/staff/dashboard", label: "Dashboard", perm: null as string | null, hideForSecurityOnly: true },
+  { href: "/staff/dashboard", label: "Dashboard", perm: null as string | null },
   {
     href: "/staff/security/checkin",
     label: "Security gate",
     perm: "security:checkin",
-    hideForSecurityOnly: false,
   },
-  { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create", hideForSecurityOnly: false },
-  { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read", hideForSecurityOnly: false },
+  { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create" },
+  { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
   {
     href: "/staff/admin/camp-addresses",
     label: "Camp addresses",
     perm: "camp:address:manage",
-    hideForSecurityOnly: false,
   },
-  { href: "/staff/admin/users", label: "Users", perm: "user:read", hideForSecurityOnly: false },
-  { href: "/staff/admin/roles", label: "Roles", perm: "role:read", hideForSecurityOnly: false },
-  { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read", hideForSecurityOnly: false },
+  { href: "/staff/admin/users", label: "Users", perm: "user:read" },
+  { href: "/staff/admin/roles", label: "Roles", perm: "role:read" },
+  { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read" },
 ];
 
 export function StaffShell({ children }: { children: React.ReactNode }) {
@@ -64,31 +62,45 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
 
   const perms = me?.permissions ?? [];
   const roles = me?.roles ?? [];
-  const securityOnly =
-    roles.includes("Security Officer") &&
-    !roles.includes("Super Admin") &&
-    !perms.includes("user:read") &&
-    !perms.includes("pcm:create");
+  const isSecurity = roles.includes("Security Officer");
+  const isSuper = roles.includes("Super Admin") || perms.includes("*");
 
-  const can = (p: string | null) =>
-    !p ||
-    perms.includes(p) ||
-    (p === "pcm:create" && perms.includes("pcm:verify")) ||
-    (p === "pcm:read" && perms.includes("pcm:search")) ||
-    // Role-name fallback so gate works even before re-seed of JWT
-    (p === "security:checkin" && roles.includes("Security Officer")) ||
-    (p === "pcm:read" && roles.includes("Security Officer")) ||
-    (p === "pcm:search" && roles.includes("Security Officer")) ||
-    perms.includes("*");
+  const can = (p: string | null) => {
+    if (!p) return true;
+    if (perms.includes("*") || perms.includes(p)) return true;
+    if (p === "pcm:create" && perms.includes("pcm:verify")) return true;
+    if (p === "pcm:read" && perms.includes("pcm:search")) return true;
+    // Security Officer baseline tools (role-name fallback until seed perms catch up)
+    if (isSecurity && !isSuper) {
+      if (
+        p === "security:checkin" ||
+        p === "pcm:read" ||
+        p === "pcm:search" ||
+        p === "pcm:create" ||
+        p === "pcm:verify"
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
 
+  // Security-focused nav: gate + intake (+ registry for lookup). No admin stubs.
   const links = nav.filter((n) => {
-    if (securityOnly && n.hideForSecurityOnly) return false;
-    if (securityOnly && n.href !== "/staff/security/checkin") return false;
-    return can(n.perm);
+    if (!can(n.perm)) return false;
+    if (isSecurity && !isSuper) {
+      return [
+        "/staff/security/checkin",
+        "/staff/pcm/intake",
+        "/staff/pcm",
+      ].includes(n.href);
+    }
+    // Hide empty dashboard link for pure security
+    if (n.href === "/staff/dashboard" && isSecurity && !isSuper) return false;
+    return true;
   });
 
-  // Security-only: no secondary nav clutter — just header + content
-  const showNav = !securityOnly && links.length > 0;
+  const showNav = links.length > 0;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -101,7 +113,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
             <div className="leading-tight">
               <div className="text-sm font-bold tracking-wide">NYSC Ekiti</div>
               <div className="text-[11px] text-white/80">
-                {securityOnly ? "Security gate" : "Staff operations"}
+                {isSecurity && !isSuper ? "Security" : "Staff operations"}
               </div>
             </div>
           </div>

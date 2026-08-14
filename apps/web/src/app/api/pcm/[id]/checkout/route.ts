@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAnyAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
+import { evaluateCheckoutEligibility } from "@/lib/dates";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,11 +17,9 @@ export async function POST(req: Request, { params }: Params) {
     return jsonOk({ pcm, message: "Already checked out" });
   }
 
-  if (pcm.status !== "CHECKED_IN" && pcm.status !== "CAMP_ACTIVE") {
-    return jsonError(
-      `Cannot check out from status ${pcm.status}. Check in first.`,
-      400
-    );
+  const eligibility = evaluateCheckoutEligibility(pcm);
+  if (!eligibility.canCheckout) {
+    return jsonError(eligibility.message, 400);
   }
 
   const updated = await prisma.pcm.update({
@@ -38,10 +37,13 @@ export async function POST(req: Request, { params }: Params) {
     entityId: id,
     pcmId: id,
     before: { status: pcm.status },
-    after: { status: updated.status },
+    after: {
+      status: updated.status,
+      eligibility: eligibility.reason,
+    },
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
 
-  return jsonOk({ pcm: updated });
+  return jsonOk({ pcm: updated, eligibility });
 }

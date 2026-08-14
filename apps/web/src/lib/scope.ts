@@ -5,7 +5,8 @@
  * Convention:
  * - User.lgaCode set → restrict to that LGA when role implies LGI-style access
  * - User.zoneCode set → restrict to that zone when role implies ZI-style access
- * - Neither / HQ roles → no geographic filter from this helper
+ * - Camp / HQ / security roles → unrestricted (state-wide camp operations)
+ * - Neither for LGI/ZI without codes → match nothing (safe default)
  */
 
 import type { AccessTokenPayload } from "@nysc/auth";
@@ -16,12 +17,17 @@ export type GeoScope = {
   unrestricted: boolean;
 };
 
+/** Roles that see all PCMs in the state (camp + secretariat), not LGA-filtered. */
 const UNRESTRICTED_ROLE_HINTS = [
   "super admin",
   "state coordinator",
   "camp director",
   "head cim",
   "registry",
+  "security officer",
+  "registration officer",
+  "accommodation officer",
+  "platoon officer",
 ];
 
 export function resolveGeoScope(
@@ -40,7 +46,6 @@ export function resolveGeoScope(
   const lgaCode = profile?.lgaCode ?? undefined;
   const zoneCode = profile?.zoneCode ?? undefined;
 
-  // Prefer tighter LGA scope when present
   if (lgaCode) {
     return { unrestricted: false, lgaCode };
   }
@@ -48,19 +53,13 @@ export function resolveGeoScope(
     return { unrestricted: false, zoneCode };
   }
 
-  // No scope fields: deny-all for scoped roles is safer than show-all.
-  // Callers should treat unrestricted:false with no codes as empty result set.
+  // Scoped role (e.g. LGI) without codes → empty result set
   return { unrestricted: false };
 }
 
-/**
- * Build a Prisma-compatible where fragment for PCM (or any entity with lgaCode/zoneCode).
- * Usage: where: { AND: [..., pcmScopeWhere(scope)] }
- */
 export function pcmScopeWhere(scope: GeoScope): Record<string, unknown> {
   if (scope.unrestricted) return {};
   if (scope.lgaCode) return { lgaCode: scope.lgaCode };
   if (scope.zoneCode) return { zoneCode: scope.zoneCode };
-  // Scoped user without codes → match nothing
   return { id: "__none__" };
 }

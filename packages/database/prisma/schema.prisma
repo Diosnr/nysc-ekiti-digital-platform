@@ -141,31 +141,34 @@ enum PcmLifecycleStatus {
 }
 
 model Pcm {
-  id              String             @id @default(cuid())
-  callUpNumber    String             @unique
-  fullName        String
-  gender          String?
-  dateOfBirth     DateTime?
-  institution     String?
-  course          String?
-  phone           String?
-  email           String?
-  photographUrl   String?
-  deploymentState String?
-  stateCode       String?
-  campAddress     String?
-  dateReporting   String?
-  batchYear       String?
-  stream          String?
-  originState     String?
-  lgaCode         String?
-  zoneCode        String?
-  status          PcmLifecycleStatus @default(VERIFIED)
-  notes           String?
-  createdById     String?
-  createdBy       User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  id                 String             @id @default(cuid())
+  callUpNumber       String             @unique
+  fullName           String
+  gender             String?
+  dateOfBirth        DateTime?
+  institution        String?
+  course             String?
+  phone              String?
+  email              String?
+  photographUrl      String?
+  deploymentState    String?
+  stateCode          String?
+  campAddress        String?
+  dateReporting      String?
+  batchYear          String?
+  stream             String?
+  originState        String?
+  lgaCode            String?
+  zoneCode           String?
+  status             PcmLifecycleStatus @default(VERIFIED)
+  /// When an admin (e.g. State Coordinator) grants early/authorised camp exit
+  campExitGrantedAt  DateTime?
+  campExitGrantedById String?
+  notes              String?
+  createdById        String?
+  createdBy          User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   verifications VerificationRecord[]
 
@@ -176,6 +179,7 @@ model Pcm {
   @@index([zoneCode])
   @@index([status])
   @@index([batchYear])
+  @@index([campExitGrantedAt])
 }
 
 model VerificationRecord {
