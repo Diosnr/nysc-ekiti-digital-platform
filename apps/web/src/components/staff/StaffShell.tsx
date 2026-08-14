@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { clearTokens, getAccessToken, staffFetch } from "@/lib/staff-api";
 
 type Me = {
@@ -17,6 +23,8 @@ type NavItem = {
   perm: string | null;
   group?: "create";
 };
+
+const ShellCtx = createContext(false);
 
 const nav: NavItem[] = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
@@ -45,6 +53,18 @@ const nav: NavItem[] = [
 ];
 
 export function StaffShell({ children }: { children: React.ReactNode }) {
+  const nested = useContext(ShellCtx);
+  // Pages still wrapping StaffShell: only render children (layout owns chrome)
+  if (nested) return <>{children}</>;
+
+  return (
+    <ShellCtx.Provider value={true}>
+      <StaffShellInner>{children}</StaffShellInner>
+    </ShellCtx.Provider>
+  );
+}
+
+function StaffShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
@@ -52,7 +72,6 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   const [createOpen, setCreateOpen] = useState(true);
   const loaded = useRef(false);
 
-  // Auth pages: no chrome
   const bare =
     pathname.startsWith("/staff/login") || pathname.startsWith("/staff/activate");
 
@@ -62,7 +81,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
       router.replace("/staff/login");
       return;
     }
-    if (loaded.current && me) return;
+    if (loaded.current) return;
     staffFetch("/api/auth/me")
       .then(async (res) => {
         if (!res.ok) {
@@ -73,7 +92,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
         loaded.current = true;
       })
       .catch(() => router.replace("/staff/login"));
-  }, [router, bare, me]);
+  }, [router, bare]);
 
   function logout() {
     const refresh = localStorage.getItem("nysc_refresh_token");
@@ -88,9 +107,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
     });
   }
 
-  if (bare) {
-    return <>{children}</>;
-  }
+  if (bare) return <>{children}</>;
 
   const perms = me?.permissions ?? [];
   const roles = me?.roles ?? [];
@@ -98,12 +115,12 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   const isSuper =
     roles.some((r) => r.toLowerCase() === "super admin") || perms.includes("*");
   const isRegistration =
-    roles.includes("Registration Officer") || perms.includes("registration:complete");
+    roles.includes("Registration Officer") ||
+    perms.includes("registration:complete");
 
   const can = (p: string | null) => {
     if (!p) return true;
     if (isSuper || perms.includes("*") || perms.includes(p)) return true;
-    if (p === "pcm:create" && perms.includes("pcm:verify")) return true;
     if (p === "pcm:read" && perms.includes("pcm:search")) return true;
     if (p === "registration:complete" && isRegistration) return true;
     if (isSecurity && !isSuper) {
@@ -246,9 +263,4 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   );
-}
-
-/** No-op wrapper so existing pages that still import StaffShell do not double-chrome. */
-export function StaffPage({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
 }

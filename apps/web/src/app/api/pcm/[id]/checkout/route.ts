@@ -22,9 +22,30 @@ export async function POST(req: Request, { params }: Params) {
     return jsonError(eligibility.message, 400);
   }
 
+  let body: {
+    exitReason?: string;
+    exitDestinationState?: string;
+  } = {};
+  try {
+    body = await req.json();
+  } catch {
+    /* optional body */
+  }
+
+  const exitReason = String(body.exitReason ?? "").trim();
+  const exitDestinationState = String(body.exitDestinationState ?? "").trim();
+  if (!exitReason) return jsonError("Reason for exit is required");
+  if (!exitDestinationState) return jsonError("Destination state is required");
+
+  const checkedOutAt = new Date();
   const updated = await prisma.pcm.update({
     where: { id },
-    data: { status: "CHECKED_OUT" },
+    data: {
+      status: "CHECKED_OUT",
+      exitReason,
+      exitDestinationState,
+      checkedOutAt,
+    },
   });
 
   const meta = clientMeta(req);
@@ -39,6 +60,9 @@ export async function POST(req: Request, { params }: Params) {
     before: { status: pcm.status },
     after: {
       status: updated.status,
+      exitReason,
+      exitDestinationState,
+      checkedOutAt: checkedOutAt.toISOString(),
       eligibility: eligibility.reason,
     },
     ip: meta.ip,
