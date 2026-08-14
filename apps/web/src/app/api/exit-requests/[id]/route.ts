@@ -10,29 +10,67 @@ import {
 
 type Params = { params: Promise<{ id: string }> };
 
+/** Light detail — no nested family/skills bulk; evidence only if requested */
 export async function GET(req: Request, { params }: Params) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
 
   const { id } = await params;
+  const wantPhotos = new URL(req.url).searchParams.get("photos") === "1";
+
   const row = await prisma.campExitRequest.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      ground: true,
+      reasonDetail: true,
+      stage: true,
+      photoUrlsJson: wantPhotos,
+      initiatedById: true,
+      initiatedByName: true,
+      initiatedAt: true,
+      clinicByName: true,
+      clinicAt: true,
+      clinicNote: true,
+      directorByName: true,
+      directorAt: true,
+      directorNote: true,
+      coordinatorByName: true,
+      coordinatorAt: true,
+      coordinatorNote: true,
+      rejectedByName: true,
+      rejectedAt: true,
+      rejectReason: true,
       pcm: {
-        include: {
-          familyStatuses: { orderBy: { createdAt: "desc" }, take: 5 },
-          skillProfiles: { orderBy: { createdAt: "desc" }, take: 5 },
-          ninRecords: { orderBy: { createdAt: "desc" }, take: 3 },
+        select: {
+          id: true,
+          callUpNumber: true,
+          fullName: true,
+          photographUrl: true,
+          status: true,
+          institution: true,
+          deploymentState: true,
+          dateReporting: true,
+          exitGround: true,
+          exitReason: true,
+          gender: true,
+          batchYear: true,
+          campAddress: true,
         },
       },
     },
   });
   if (!row) return jsonError("Not found", 404);
 
+  const photoUrls =
+    wantPhotos && row.photoUrlsJson ? safeJson(row.photoUrlsJson) : [];
+
   return jsonOk({
     request: {
       ...row,
-      photoUrls: row.photoUrlsJson ? safeJson(row.photoUrlsJson) : [],
+      photoUrlsJson: undefined,
+      photoUrls,
+      photoCount: row.photoUrlsJson ? countPhotos(row.photoUrlsJson) : photoUrls.length,
     },
   });
 }
@@ -46,14 +84,22 @@ function safeJson(s: string): string[] {
   }
 }
 
-/** Approve or reject at current stage — stamps actor's name */
+function countPhotos(json: string): number {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function PATCH(req: Request, { params }: Params) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
 
   const { id } = await params;
   const body = await req.json();
-  const decision = String(body.decision ?? "").toLowerCase(); // approve | reject
+  const decision = String(body.decision ?? "").toLowerCase();
   const note = body.note ? String(body.note).trim() : null;
 
   if (decision !== "approve" && decision !== "reject") {
@@ -64,11 +110,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!row) return jsonError("Not found", 404);
 
   const stage = row.stage as ExitStage;
-  if (
-    stage === "APPROVED" ||
-    stage === "REJECTED" ||
-    stage === "CANCELLED"
-  ) {
+  if (stage === "APPROVED" || stage === "REJECTED" || stage === "CANCELLED") {
     return jsonError("Request already closed", 400);
   }
 
@@ -96,11 +138,7 @@ export async function PATCH(req: Request, { params }: Params) {
     });
     await prisma.pcm.update({
       where: { id: row.pcmId },
-      data: {
-        // keep exitGround stamp for history; clear grant
-        campExitGrantedAt: null,
-        campExitGrantedById: null,
-      },
+      data: { campExitGrantedAt: null, campExitGrantedById: null },
     });
 
     const meta = clientMeta(req);
@@ -120,7 +158,6 @@ export async function PATCH(req: Request, { params }: Params) {
     return jsonOk({ request: updated });
   }
 
-  // approve
   const next = nextStageAfterApprove(stage, row.ground as ExitGround);
   const data: Record<string, unknown> = { stage: next };
 

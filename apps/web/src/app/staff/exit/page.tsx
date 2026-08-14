@@ -26,6 +26,7 @@ type ExitReq = {
   reasonDetail: string | null;
   stage: ExitStage;
   photoUrls: string[];
+  photoCount?: number;
   initiatedByName: string;
   initiatedAt: string;
   clinicByName?: string | null;
@@ -51,8 +52,9 @@ type ExitReq = {
     dateReporting?: string | null;
     exitGround?: string | null;
     exitReason?: string | null;
-    familyStatuses?: unknown[];
-    skillProfiles?: unknown[];
+    gender?: string | null;
+    batchYear?: string | null;
+    campAddress?: string | null;
   };
 };
 
@@ -63,7 +65,7 @@ export default function GrantExitPage() {
   const [tab, setTab] = useState<Tab>("my_queue");
   const [list, setList] = useState<ExitReq[]>([]);
   const [selected, setSelected] = useState<ExitReq | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [photosLoading, setPhotosLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -124,22 +126,27 @@ export default function GrantExitPage() {
     void loadList();
   }, [tab, loadList]);
 
-  async function openDetail(id: string) {
-    setDetailLoading(true);
+  /** Instant open from list row — no blocking wait */
+  function openDetail(row: ExitReq) {
     setError(null);
-    try {
-      const res = await staffFetch(`/api/exit-requests/${id}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? "Failed to load detail");
-        return;
-      }
-      setSelected(data.request);
-      setNote("");
-    } catch {
-      setError("Network error");
-    } finally {
-      setDetailLoading(false);
+    setNote("");
+    setSelected({ ...row, photoUrls: row.photoUrls ?? [] });
+    // Lazy-load evidence only if any
+    if ((row.photoCount ?? 0) > 0 || (row.photoUrls?.length ?? 0) > 0) {
+      setPhotosLoading(true);
+      staffFetch(`/api/exit-requests/${row.id}?photos=1`)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = await res.json();
+          const full = data.request as ExitReq;
+          setSelected((prev) =>
+            prev && prev.id === row.id
+              ? { ...prev, ...full, pcm: { ...prev.pcm, ...full.pcm } }
+              : prev
+          );
+        })
+        .catch(() => {})
+        .finally(() => setPhotosLoading(false));
     }
   }
 
@@ -183,19 +190,17 @@ export default function GrantExitPage() {
         setError(data.error ?? "Search failed");
         return;
       }
-      const list = data.pcms ?? [];
-      if (!list.length) {
+      const hits = data.pcms ?? [];
+      if (!hits.length) {
         setError("No PCM found");
         return;
       }
       const hit =
-        list.find(
+        hits.find(
           (p: { callUpNumber: string }) =>
             p.callUpNumber.toLowerCase() === q.trim().toLowerCase()
-        ) ?? list[0];
-      const det = await staffFetch(`/api/pcm/${hit.id}`);
-      const full = await det.json();
-      setPcmHit(full.pcm ?? hit);
+        ) ?? hits[0];
+      setPcmHit(hit);
     } catch {
       setError("Network error");
     } finally {
@@ -263,8 +268,7 @@ export default function GrantExitPage() {
     <StaffShell>
       <h1 className="text-2xl font-bold text-slate-900">Camp exit</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Chain: Platoon initiates → Clinic (medical only) → Camp Director → State
-        Coordinator. Approvals stamp the officer's name.
+        Platoon initiates → Clinic (medical only) → Camp Director → State Coordinator.
       </p>
 
       {error && (
@@ -346,7 +350,6 @@ export default function GrantExitPage() {
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                   value={reasonDetail}
                   onChange={(e) => setReasonDetail(e.target.value)}
-                  placeholder="Brief explanation"
                 />
               </div>
               <div>
@@ -358,9 +361,6 @@ export default function GrantExitPage() {
                   className="mt-1 block w-full text-sm"
                   onChange={(e) => onPhotoFiles(e.target.files)}
                 />
-                {photoUrls.length > 0 && (
-                  <p className="mt-1 text-xs text-slate-500">{photoUrls.length} image(s) attached</p>
-                )}
               </div>
               <button
                 type="submit"
@@ -377,7 +377,11 @@ export default function GrantExitPage() {
       {tab !== "initiate" && (
         <div className="mt-6">
           {loading && !list.length ? (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-200" />
+              ))}
+            </div>
           ) : list.length === 0 ? (
             <p className="text-sm text-slate-500">No requests in this list.</p>
           ) : (
@@ -386,7 +390,7 @@ export default function GrantExitPage() {
                 <li key={r.id}>
                   <button
                     type="button"
-                    onClick={() => void openDetail(r.id)}
+                    onClick={() => openDetail(r)}
                     className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
                   >
                     <PcmPhoto
@@ -401,7 +405,7 @@ export default function GrantExitPage() {
                         <span className="font-medium text-nysc-green">{groundLabel(r.ground)}</span>
                         {" · "}
                         {stageLabel(r.stage)}
-                        {" · by "}
+                        {" · "}
                         {r.initiatedByName}
                       </p>
                     </div>
@@ -413,7 +417,7 @@ export default function GrantExitPage() {
         </div>
       )}
 
-      {(selected || detailLoading) && (
+      {selected && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <button
             type="button"
@@ -421,129 +425,129 @@ export default function GrantExitPage() {
             aria-label="Close"
             onClick={() => setSelected(null)}
           />
-          <aside className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white shadow-xl">
-            {detailLoading || !selected ? (
-              <p className="p-6 text-sm text-slate-500">Loading file…</p>
-            ) : (
-              <>
-                <div className="border-b border-slate-200 p-5">
-                  <button
-                    type="button"
-                    className="text-sm text-slate-500 hover:text-slate-800"
-                    onClick={() => setSelected(null)}
-                  >
-                    ← Close
-                  </button>
-                  <div className="mt-3 flex gap-4">
-                    <PcmPhoto url={selected.pcm.photographUrl} alt={selected.pcm.fullName} />
-                    <div>
-                      <h2 className="text-lg font-bold text-slate-900">{selected.pcm.fullName}</h2>
-                      <p className="font-mono text-sm text-slate-600">{selected.pcm.callUpNumber}</p>
-                      <p className="mt-2 inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-                        {groundLabel(selected.ground)}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">{stageLabel(selected.stage)}</p>
-                    </div>
+          <aside className="relative z-10 flex h-full w-full max-w-lg animate-in slide-in-from-right flex-col overflow-y-auto bg-white shadow-xl duration-200">
+            <div className="border-b border-slate-200 p-5">
+              <button
+                type="button"
+                className="text-sm text-slate-500 hover:text-slate-800"
+                onClick={() => setSelected(null)}
+              >
+                ← Close
+              </button>
+              <div className="mt-3 flex gap-4">
+                <PcmPhoto
+                  url={selected.pcm.photographUrl}
+                  alt={selected.pcm.fullName}
+                  sizeClass="h-24 w-24"
+                />
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">{selected.pcm.fullName}</h2>
+                  <p className="font-mono text-sm text-slate-600">{selected.pcm.callUpNumber}</p>
+                  <p className="mt-2 inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                    {groundLabel(selected.ground)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">{stageLabel(selected.stage)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 p-5 text-sm">
+              <section>
+                <h3 className="text-xs font-semibold uppercase text-slate-500">Profile</h3>
+                <p className="mt-1">{selected.pcm.institution || "—"}</p>
+                <p>Deployment: {selected.pcm.deploymentState || "—"}</p>
+                <p>Reporting: {selected.pcm.dateReporting || "—"}</p>
+                {selected.reasonDetail && (
+                  <p className="mt-2 rounded-md bg-slate-50 p-2 text-slate-700">{selected.reasonDetail}</p>
+                )}
+              </section>
+
+              <section>
+                <h3 className="text-xs font-semibold uppercase text-slate-500">Evidence</h3>
+                {photosLoading && (
+                  <p className="mt-1 text-xs text-slate-400">Loading photos…</p>
+                )}
+                {selected.photoUrls?.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {selected.photoUrls.map((u, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img key={i} src={u} alt="" className="h-20 w-20 rounded object-cover" />
+                    ))}
                   </div>
-                </div>
+                ) : (
+                  !photosLoading && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      {(selected.photoCount ?? 0) > 0 ? "Could not load photos" : "None attached"}
+                    </p>
+                  )
+                )}
+              </section>
 
-                <div className="space-y-4 p-5 text-sm">
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase text-slate-500">Profile</h3>
-                    <p className="mt-1">{selected.pcm.institution || "—"}</p>
-                    <p>Deployment: {selected.pcm.deploymentState || "—"}</p>
-                    <p>Reporting: {selected.pcm.dateReporting || "—"}</p>
-                    {selected.reasonDetail && (
-                      <p className="mt-2 rounded-md bg-slate-50 p-2 text-slate-700">{selected.reasonDetail}</p>
-                    )}
-                  </section>
-
-                  {selected.photoUrls?.length > 0 && (
-                    <section>
-                      <h3 className="text-xs font-semibold uppercase text-slate-500">Evidence</h3>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {selected.photoUrls.map((u, i) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img key={i} src={u} alt="" className="h-20 w-20 rounded object-cover" />
-                        ))}
-                      </div>
-                    </section>
+              <section>
+                <h3 className="text-xs font-semibold uppercase text-slate-500">Approval trail</h3>
+                <ul className="mt-2 space-y-2 text-slate-700">
+                  <li>
+                    Initiated by <strong>{selected.initiatedByName}</strong>
+                    {" · "}
+                    {new Date(selected.initiatedAt).toLocaleString()}
+                  </li>
+                  {selected.clinicByName && (
+                    <li>
+                      Clinic: <strong>{selected.clinicByName}</strong>
+                      {selected.clinicNote ? ` — ${selected.clinicNote}` : ""}
+                    </li>
                   )}
-
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase text-slate-500">Approval trail (names)</h3>
-                    <ul className="mt-2 space-y-2 text-slate-700">
-                      <li>
-                        Initiated by <strong>{selected.initiatedByName}</strong>
-                        {" · "}
-                        {new Date(selected.initiatedAt).toLocaleString()}
-                      </li>
-                      {selected.clinicByName && (
-                        <li>
-                          Clinic: <strong>{selected.clinicByName}</strong>
-                          {selected.clinicNote ? ` — ${selected.clinicNote}` : ""}
-                        </li>
-                      )}
-                      {selected.directorByName && (
-                        <li>
-                          Camp Director: <strong>{selected.directorByName}</strong>
-                          {selected.directorNote ? ` — ${selected.directorNote}` : ""}
-                        </li>
-                      )}
-                      {selected.coordinatorByName && (
-                        <li>
-                          State Coordinator: <strong>{selected.coordinatorByName}</strong>
-                          {selected.coordinatorNote ? ` — ${selected.coordinatorNote}` : ""}
-                        </li>
-                      )}
-                      {selected.rejectedByName && (
-                        <li className="text-red-700">
-                          Rejected by <strong>{selected.rejectedByName}</strong>
-                          {selected.rejectReason ? ` — ${selected.rejectReason}` : ""}
-                        </li>
-                      )}
-                    </ul>
-                  </section>
-
-                  {Array.isArray(selected.pcm.familyStatuses) && selected.pcm.familyStatuses.length > 0 && (
-                    <section>
-                      <h3 className="text-xs font-semibold uppercase text-slate-500">Special status / family</h3>
-                      <p className="mt-1 text-slate-600">{selected.pcm.familyStatuses.length} record(s) on file</p>
-                    </section>
+                  {selected.directorByName && (
+                    <li>
+                      Camp Director: <strong>{selected.directorByName}</strong>
+                      {selected.directorNote ? ` — ${selected.directorNote}` : ""}
+                    </li>
                   )}
-
-                  {canActOnStage(selected.stage, roles, perms) && (
-                    <section className="border-t border-slate-100 pt-4">
-                      <label className="text-xs font-semibold uppercase text-slate-500">Note (optional)</label>
-                      <textarea
-                        rows={2}
-                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                      />
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          type="button"
-                          disabled={loading}
-                          onClick={() => void decide("approve")}
-                          className="flex-1 rounded-md bg-nysc-green py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          disabled={loading}
-                          onClick={() => void decide("reject")}
-                          className="flex-1 rounded-md border border-red-300 bg-red-50 py-2.5 text-sm font-semibold text-red-700 disabled:opacity-40"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </section>
+                  {selected.coordinatorByName && (
+                    <li>
+                      State Coordinator: <strong>{selected.coordinatorByName}</strong>
+                      {selected.coordinatorNote ? ` — ${selected.coordinatorNote}` : ""}
+                    </li>
                   )}
-                </div>
-              </>
-            )}
+                  {selected.rejectedByName && (
+                    <li className="text-red-700">
+                      Rejected by <strong>{selected.rejectedByName}</strong>
+                      {selected.rejectReason ? ` — ${selected.rejectReason}` : ""}
+                    </li>
+                  )}
+                </ul>
+              </section>
+
+              {canActOnStage(selected.stage, roles, perms) && (
+                <section className="border-t border-slate-100 pt-4">
+                  <label className="text-xs font-semibold uppercase text-slate-500">Note</label>
+                  <textarea
+                    rows={2}
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void decide("approve")}
+                      className="flex-1 rounded-md bg-nysc-green py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void decide("reject")}
+                      className="flex-1 rounded-md border border-red-300 bg-red-50 py-2.5 text-sm font-semibold text-red-700 disabled:opacity-40"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </section>
+              )}
+            </div>
           </aside>
         </div>
       )}

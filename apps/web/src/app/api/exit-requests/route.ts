@@ -29,11 +29,31 @@ export async function GET(req: Request) {
     };
   }
 
+  // Light list — never ship base64 evidence photos in the list payload
   const rows = await prisma.campExitRequest.findMany({
     where,
     orderBy: { initiatedAt: "desc" },
-    take: 200,
-    include: {
+    take: 100,
+    select: {
+      id: true,
+      ground: true,
+      reasonDetail: true,
+      stage: true,
+      photoUrlsJson: true,
+      initiatedByName: true,
+      initiatedAt: true,
+      clinicByName: true,
+      clinicAt: true,
+      clinicNote: true,
+      directorByName: true,
+      directorAt: true,
+      directorNote: true,
+      coordinatorByName: true,
+      coordinatorAt: true,
+      coordinatorNote: true,
+      rejectedByName: true,
+      rejectedAt: true,
+      rejectReason: true,
       pcm: {
         select: {
           id: true,
@@ -52,23 +72,45 @@ export async function GET(req: Request) {
   });
 
   return jsonOk({
-    requests: rows.map((r) => ({
-      ...r,
-      photoUrls: r.photoUrlsJson ? safeJson(r.photoUrlsJson) : [],
-    })),
+    requests: rows.map((r) => {
+      const urls = countPhotos(r.photoUrlsJson);
+      return {
+        id: r.id,
+        ground: r.ground,
+        reasonDetail: r.reasonDetail,
+        stage: r.stage,
+        photoCount: urls,
+        photoUrls: [] as string[],
+        initiatedByName: r.initiatedByName,
+        initiatedAt: r.initiatedAt,
+        clinicByName: r.clinicByName,
+        clinicAt: r.clinicAt,
+        clinicNote: r.clinicNote,
+        directorByName: r.directorByName,
+        directorAt: r.directorAt,
+        directorNote: r.directorNote,
+        coordinatorByName: r.coordinatorByName,
+        coordinatorAt: r.coordinatorAt,
+        coordinatorNote: r.coordinatorNote,
+        rejectedByName: r.rejectedByName,
+        rejectedAt: r.rejectedAt,
+        rejectReason: r.rejectReason,
+        pcm: r.pcm,
+      };
+    }),
   });
 }
 
-function safeJson(s: string): string[] {
+function countPhotos(json: string | null): number {
+  if (!json) return 0;
   try {
-    const v = JSON.parse(s);
-    return Array.isArray(v) ? v.map(String) : [];
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v.length : 0;
   } catch {
-    return [];
+    return 0;
   }
 }
 
-/** Platoon officers only may initiate exit requests */
 export async function POST(req: Request) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
@@ -115,7 +157,6 @@ export async function POST(req: Request) {
     select: { name: true, email: true },
   });
   const actorName = actor?.name?.trim() || actor?.email || auth.payload.email;
-
   const stage = firstStageAfterInitiation(ground);
 
   const row = await prisma.campExitRequest.create({
@@ -128,15 +169,12 @@ export async function POST(req: Request) {
       initiatedById: auth.payload.sub,
       initiatedByName: actorName,
     },
-    include: {
-      pcm: {
-        select: {
-          id: true,
-          callUpNumber: true,
-          fullName: true,
-          photographUrl: true,
-        },
-      },
+    select: {
+      id: true,
+      ground: true,
+      stage: true,
+      initiatedByName: true,
+      pcm: { select: { id: true, callUpNumber: true, fullName: true } },
     },
   });
 
