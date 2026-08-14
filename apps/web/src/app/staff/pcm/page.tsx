@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
+import { PcmPhoto } from "@/components/staff/PcmPhoto";
 import { staffFetch } from "@/lib/staff-api";
 
 type Pcm = {
@@ -97,16 +98,12 @@ export default function PcmRegistryPage() {
             {pcms.map((p) => (
               <tr key={p.id} className="border-b border-slate-100">
                 <td className="px-4 py-2">
-                  {p.photographUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.photographUrl}
-                      alt=""
-                      className="h-10 w-10 rounded-md object-cover"
-                    />
-                  ) : (
-                    <div className="h-10 w-10 rounded-md bg-slate-100" />
-                  )}
+                  <PcmPhoto
+                    url={p.photographUrl}
+                    alt=""
+                    sizeClass="h-10 w-10"
+                    className="rounded-md"
+                  />
                 </td>
                 <td className="px-4 py-3 font-mono text-xs">{p.callUpNumber}</td>
                 <td className="px-4 py-3 font-medium">

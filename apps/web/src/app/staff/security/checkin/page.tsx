@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
+import { PcmPhoto } from "@/components/staff/PcmPhoto";
 import { staffFetch } from "@/lib/staff-api";
 import { evaluateCheckoutEligibility } from "@/lib/dates";
 
@@ -47,7 +48,11 @@ export default function SecurityGatePage() {
         setError("No PCM found. Complete intake first, or check the call-up number.");
         return;
       }
-      setPcm(list[0]);
+      // Prefer exact call-up match if several
+      const exact = list.find(
+        (p) => p.callUpNumber.toLowerCase() === q.trim().toLowerCase()
+      );
+      setPcm(exact ?? list[0]);
     } catch {
       setError("Network error");
     } finally {
@@ -74,7 +79,12 @@ export default function SecurityGatePage() {
           ? `Checked in: ${data.pcm.fullName}`
           : `Checked out: ${data.pcm.fullName}`
       );
-      setPcm({ ...pcm, ...data.pcm });
+      // Keep existing photo if API payload omits it
+      setPcm({
+        ...pcm,
+        ...data.pcm,
+        photographUrl: data.pcm.photographUrl || pcm.photographUrl,
+      });
     } catch {
       setError("Network error");
     } finally {
@@ -133,17 +143,11 @@ export default function SecurityGatePage() {
       {pcm && (
         <div className="mt-8 flex flex-col gap-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row">
           <div className="shrink-0">
-            {pcm.photographUrl && /^https?:\/\//i.test(pcm.photographUrl) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={pcm.photographUrl}
-                alt={pcm.fullName}
-                className="h-40 w-40 rounded-xl border object-cover"
-              />
-            ) : (
-              <div className="flex h-40 w-40 items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-400">
-                No photo
-              </div>
+            <PcmPhoto url={pcm.photographUrl} alt={pcm.fullName} />
+            {!pcm.photographUrl && (
+              <p className="mt-2 max-w-[10rem] text-center text-[11px] text-slate-400">
+                No photo on file — re-do intake with photo if needed
+              </p>
             )}
           </div>
           <div className="flex-1">
@@ -187,9 +191,12 @@ export default function SecurityGatePage() {
             {!showCheckout && eligibility && pcm.status === "CHECKED_IN" && (
               <p className="mt-3 text-xs text-amber-800">{eligibility.message}</p>
             )}
-            {!showCheckout && eligibility && pcm.status !== "CHECKED_IN" && pcm.status !== "CHECKED_OUT" && (
-              <p className="mt-3 text-xs text-slate-500">{eligibility.message}</p>
-            )}
+            {!showCheckout &&
+              eligibility &&
+              pcm.status !== "CHECKED_IN" &&
+              pcm.status !== "CHECKED_OUT" && (
+                <p className="mt-3 text-xs text-slate-500">{eligibility.message}</p>
+              )}
           </div>
         </div>
       )}

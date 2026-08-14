@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
+import { PcmPhoto } from "@/components/staff/PcmPhoto";
 import { staffFetch } from "@/lib/staff-api";
 
 type Pcm = {
@@ -19,6 +20,7 @@ type Pcm = {
   dateReporting?: string | null;
   batchYear?: string | null;
   status?: string;
+  campExitGrantedAt?: string | null;
 };
 
 export default function PcmDetailPage() {
@@ -50,18 +52,7 @@ export default function PcmDetailPage() {
         <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-6 p-6 sm:flex-row">
             <div className="mx-auto shrink-0 sm:mx-0">
-              {pcm.photographUrl && /^https?:\/\//i.test(pcm.photographUrl) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={pcm.photographUrl}
-                  alt={pcm.fullName}
-                  className="h-40 w-40 rounded-xl border border-slate-200 object-cover shadow-sm"
-                />
-              ) : (
-                <div className="flex h-40 w-40 items-center justify-center rounded-xl bg-slate-100 text-sm text-slate-400">
-                  No photo
-                </div>
-              )}
+              <PcmPhoto url={pcm.photographUrl} alt={pcm.fullName} />
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold text-slate-900">{pcm.fullName}</h1>

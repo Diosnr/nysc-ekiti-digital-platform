@@ -89,15 +89,46 @@ export class ManualVerificationAdapter implements CallUpVerificationAdapter {
   }
 }
 
-export function parseNyscVerifyHtml(html: string): Record<string, string> {
+function absoluteUrl(src: string, pageUrl?: string): string {
+  const s = src.trim();
+  if (/^https?:\/\//i.test(s) || s.startsWith("data:")) return s;
+  if (s.startsWith("//")) return `https:${s}`;
+  try {
+    const base = pageUrl || "https://mgt.nysc.org.ng/";
+    return new URL(s, base).toString();
+  } catch {
+    return s;
+  }
+}
+
+export function parseNyscVerifyHtml(
+  html: string,
+  pageUrl?: string
+): Record<string, string> {
   const withoutScripts = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ");
 
-  const imgMatch = withoutScripts.match(
-    /<img[^>]+src=["'](data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+)["']/i
+  // Prefer embedded base64 passport photo
+  const dataImg = withoutScripts.match(
+    /<img[^>]+src=["'](data:image\/(?:jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+)["']/i
   );
-  const photographUrl = imgMatch?.[1];
+  // Or remote / relative image (common on NYSC pages)
+  const remoteImg =
+    withoutScripts.match(
+      /<img[^>]+src=["']((?:https?:)?\/\/[^"']+|\/?[^"']*\.(?:jpg|jpeg|png|webp|gif)[^"']*)["']/i
+    ) ||
+    withoutScripts.match(
+      /<img[^>]+src=["'](\/[^"']+)["'][^>]*(?:photo|passport|corp|member)/i
+    ) ||
+    withoutScripts.match(/<img[^>]+id=["'][^"']*photo[^"']*["'][^>]+src=["']([^"']+)["']/i) ||
+    withoutScripts.match(/<img[^>]+src=["']([^"']+)["'][^>]+id=["'][^"']*photo[^"']*["']/i);
+
+  const photographUrl = dataImg?.[1]
+    ? dataImg[1]
+    : remoteImg?.[1]
+      ? absoluteUrl(remoteImg[1], pageUrl)
+      : undefined;
 
   const plain = withoutScripts
     .replace(/<[^>]+>/g, "\n")
@@ -144,23 +175,17 @@ export function parseNyscVerifyHtml(html: string): Record<string, string> {
   return out;
 }
 
-/** Extract a NYSC verify URL from noisy scan text */
 export function extractNyscVerifyUrl(input: string): string | null {
   const trimmed = input.trim();
-
-  // Full URL somewhere in the string
   const match = trimmed.match(
     /https?:\/\/[^\s"'<>]*nysc\.org\.ng[^\s"'<>]*CorpMemberVerify\.aspx[^\s"'<>]*/i
   );
   if (match) {
     return match[0].replace(/[.,;)]+$/, "");
   }
-
-  // Already a clean URL
   if (/^https?:\/\//i.test(trimmed) && /nysc\.org\.ng/i.test(trimmed)) {
     return trimmed;
   }
-
   return null;
 }
 
@@ -187,7 +212,6 @@ export class QrPayloadAdapter implements CallUpVerificationAdapter {
       return mapFields(data, "qr_payload");
     }
 
-    // Prefer extracting official NYSC verify URL from scan noise
     const nyscUrl = extractNyscVerifyUrl(trimmed);
     if (nyscUrl || isNyscVerifyUrl(trimmed)) {
       return this.verifyNyscPage(nyscUrl || trimmed);
@@ -211,9 +235,8 @@ export class QrPayloadAdapter implements CallUpVerificationAdapter {
           const data = (await res.json()) as Record<string, unknown>;
           return mapFields(data, "official_api");
         }
-        // Try NYSC-style HTML parse as fallback
         const html = await res.text();
-        const parsed = parseNyscVerifyHtml(html);
+        const parsed = parseNyscVerifyHtml(html, trimmed);
         if (parsed.fullName && parsed.callUpNumber) {
           return mapFields(parsed, "nysc_verify_page");
         }
@@ -228,7 +251,6 @@ export class QrPayloadAdapter implements CallUpVerificationAdapter {
     }
 
     if (trimmed.length >= 4) {
-      // Plain token / call-up string — cannot resolve identity without the verify page
       throw new Error(
         "Scanned text is not a full NYSC verification URL. Open the QR link or enter call-up number and name manually."
       );
@@ -260,7 +282,7 @@ export class QrPayloadAdapter implements CallUpVerificationAdapter {
     }
 
     const html = await res.text();
-    const parsed = parseNyscVerifyHtml(html);
+    const parsed = parseNyscVerifyHtml(html, url);
 
     if (!parsed.fullName || !parsed.callUpNumber) {
       throw new Error(
