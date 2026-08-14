@@ -59,6 +59,7 @@ export async function loadUserAuthContext(userId: string) {
       name: user.name,
       lgaCode: user.lgaCode,
       zoneCode: user.zoneCode,
+      platoonCode: user.platoonCode,
       post: user.post,
       rank: user.rank,
     },
@@ -97,7 +98,13 @@ export async function issueTokens(userId: string, meta?: { ip?: string; userAgen
     data: { lastLoginAt: new Date() },
   });
 
-  return { accessToken, refreshToken, user: ctx.user, roles: ctx.roles, permissions: ctx.permissions };
+  return {
+    accessToken,
+    refreshToken,
+    user: ctx.user,
+    roles: ctx.roles,
+    permissions: ctx.permissions,
+  };
 }
 
 export async function revokeRefreshToken(rawToken: string) {

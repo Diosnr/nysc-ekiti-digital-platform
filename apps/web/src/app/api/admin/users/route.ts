@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth-server";
 import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
+import { setOfficerPlatoon, isPlatoonOfficerRole } from "@/lib/platoon-tenure";
 
 export async function GET(req: Request) {
   const auth = await requireAuth(req, "user:read");
@@ -19,6 +20,7 @@ export async function GET(req: Request) {
       post: true,
       lgaCode: true,
       zoneCode: true,
+      platoonCode: true,
       isActive: true,
       lastLoginAt: true,
       createdAt: true,
@@ -43,8 +45,22 @@ export async function POST(req: Request) {
   const name = body.name ? String(body.name) : null;
   const password = body.password ? String(body.password) : null;
   const roleIds: string[] = Array.isArray(body.roleIds) ? body.roleIds.map(String) : [];
+  let platoonCode = body.platoonCode ? String(body.platoonCode).trim() : null;
+  if (platoonCode === "") platoonCode = null;
 
   if (!email) return jsonError("email is required");
+
+  const roles =
+    roleIds.length > 0
+      ? await prisma.role.findMany({ where: { id: { in: roleIds } } })
+      : [];
+  const roleNames = roles.map((r) => r.name);
+  if (isPlatoonOfficerRole(roleNames) && !platoonCode) {
+    return jsonError("Platoon number (1–10) is required for Platoon Officer");
+  }
+  if (platoonCode && !/^(10|[1-9])$/.test(platoonCode)) {
+    return jsonError("platoonCode must be 1–10");
+  }
 
   const exists = await prisma.user.findUnique({ where: { email } });
   if (exists) return jsonError("Email already registered", 409);
@@ -62,6 +78,7 @@ export async function POST(req: Request) {
       post: body.post ? String(body.post) : null,
       lgaCode: body.lgaCode ? String(body.lgaCode) : null,
       zoneCode: body.zoneCode ? String(body.zoneCode) : null,
+      platoonCode: isPlatoonOfficerRole(roleNames) ? platoonCode : null,
       isActive: true,
       roles: roleIds.length
         ? { create: roleIds.map((roleId) => ({ roleId, assignedBy: auth.payload.sub })) }
@@ -69,6 +86,21 @@ export async function POST(req: Request) {
     },
     include: { roles: { include: { role: true } } },
   });
+
+  if (isPlatoonOfficerRole(roleNames) && platoonCode) {
+    const actor = await prisma.user.findUnique({
+      where: { id: auth.payload.sub },
+      select: { name: true, email: true },
+    });
+    await setOfficerPlatoon({
+      userId: user.id,
+      officerName: name || email,
+      platoonCode,
+      assignedById: auth.payload.sub,
+      assignedByName: actor?.name || actor?.email || auth.payload.email,
+      note: "Initial assignment on create",
+    });
+  }
 
   const meta = clientMeta(req);
   await writeAudit({
@@ -78,7 +110,7 @@ export async function POST(req: Request) {
     action: "user.create",
     entityType: "User",
     entityId: user.id,
-    after: { email, name, roleIds },
+    after: { email, name, roleIds, platoonCode },
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
@@ -89,6 +121,7 @@ export async function POST(req: Request) {
         id: user.id,
         email: user.email,
         name: user.name,
+        platoonCode: user.platoonCode,
         roles: user.roles.map((r) => r.role.name),
       },
     },
