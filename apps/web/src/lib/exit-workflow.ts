@@ -61,15 +61,14 @@ export function stageForRoles(roles: string[]): ExitStage | null {
   return null;
 }
 
-export function canInitiateExit(roles: string[], permissions: string[]): boolean {
-  if (permissions.includes("*") || permissions.includes("camp:exeat")) return true;
+/** Only Platoon officers may start an exit request (UI + API). */
+export function canInitiateExit(roles: string[], _permissions: string[]): boolean {
   const r = roles.map((x) => x.toLowerCase());
   return r.some(
     (x) =>
-      x.includes("platoon") ||
-      x.includes("super admin") ||
-      x.includes("camp director") ||
-      x.includes("state coordinator")
+      x.includes("platoon officer") ||
+      x === "platoon" ||
+      x.includes("head of platoon")
   );
 }
 
