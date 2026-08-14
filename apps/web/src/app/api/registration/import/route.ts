@@ -3,6 +3,22 @@ import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { mapRowFields } from "@/lib/csv";
 
+function parseDob(raw: string): Date | null {
+  if (!raw) return null;
+  // dd/mm/yyyy or d/m/yyyy
+  const m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    const d = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    let y = Number(m[3]);
+    if (y < 100) y += 2000;
+    const dt = new Date(Date.UTC(y, mo, d));
+    if (!Number.isNaN(dt.getTime())) return dt;
+  }
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? null : new Date(t);
+}
+
 export async function POST(req: Request) {
   const auth = await requireAuth(req, "registration:complete");
   if (auth instanceof Response) return auth;
@@ -51,31 +67,54 @@ export async function POST(req: Request) {
         where: { callUpNumber: callUp },
       });
 
+      const dob = parseDob(mapped.dateOfBirth || "");
+      const noteBits: string[] = [];
+      if (mapped.maritalStatus) noteBits.push(`Marital: ${mapped.maritalStatus}`);
+      if (mapped.qualification) noteBits.push(`Qual: ${mapped.qualification}`);
+      if (mapped.cds) noteBits.push(`CDS: ${mapped.cds}`);
+      if (mapped.idCardVerifyUrl) noteBits.push(`ID card: ${mapped.idCardVerifyUrl}`);
+      if (mapped.permanentAddress) noteBits.push(`Perm addr: ${mapped.permanentAddress}`);
+
       if (existing) {
-        const data: Record<string, string | null | undefined> = {};
-        const fill = (key: string, val: string) => {
+        const data: Record<string, unknown> = {};
+        const fillStr = (key: string, val: string) => {
           if (!val) return;
           const cur = (existing as Record<string, unknown>)[key];
           if (cur == null || cur === "") data[key] = val;
         };
-        fill("fullName", mapped.fullName);
-        fill("phone", mapped.phone);
-        fill("email", mapped.email);
-        fill("gender", mapped.gender);
-        fill("institution", mapped.institution);
-        fill("course", mapped.course);
-        fill("deploymentState", mapped.deploymentState);
-        fill("batchYear", mapped.batchYear);
-        fill("lgaCode", mapped.lgaCode);
-        fill("zoneCode", mapped.zoneCode);
 
+        fillStr("fullName", mapped.fullName);
+        fillStr("phone", mapped.phone);
+        fillStr("email", mapped.email);
+        fillStr("gender", mapped.gender);
+        fillStr("institution", mapped.institution);
+        fillStr("course", mapped.course);
+        fillStr("deploymentState", mapped.deploymentState);
+        fillStr("batchYear", mapped.batchYear);
+        fillStr("lgaCode", mapped.lgaCode);
+        fillStr("zoneCode", mapped.zoneCode);
+        fillStr("campAddress", mapped.campAddress);
+        fillStr("stream", mapped.stream);
+        fillStr("originState", mapped.originState);
+        fillStr("photographUrl", mapped.photographUrl);
+
+        // Always refresh operational codes from official export when present
         if (mapped.stateCode) data.stateCode = mapped.stateCode;
+        if (mapped.platoonCode) {
+          data.platoonCode = mapped.platoonCode;
+          if (!existing.platoonAssignedAt) {
+            data.platoonAssignedAt = new Date();
+            data.platoonAssignedByName = `Import · ${actorName}`;
+          }
+        }
         if (mapped.ppaName) data.ppaName = mapped.ppaName;
         if (mapped.ppaAddress) data.ppaAddress = mapped.ppaAddress;
         if (mapped.lgiName) data.lgiName = mapped.lgiName;
         if (mapped.lgiPhone) data.lgiPhone = mapped.lgiPhone;
         if (mapped.ziName) data.ziName = mapped.ziName;
         if (mapped.ziPhone) data.ziPhone = mapped.ziPhone;
+        if (dob && !existing.dateOfBirth) data.dateOfBirth = dob;
+        if (noteBits.length && !existing.notes) data.notes = noteBits.join(" | ");
 
         if (Object.keys(data).length) {
           await prisma.pcm.update({ where: { id: existing.id }, data });
@@ -94,6 +133,9 @@ export async function POST(req: Request) {
             callUpNumber: callUp,
             fullName: mapped.fullName,
             stateCode: mapped.stateCode || null,
+            platoonCode: mapped.platoonCode || null,
+            platoonAssignedAt: mapped.platoonCode ? new Date() : null,
+            platoonAssignedByName: mapped.platoonCode ? `Import · ${actorName}` : null,
             ppaName: mapped.ppaName || null,
             ppaAddress: mapped.ppaAddress || null,
             lgiName: mapped.lgiName || null,
@@ -106,10 +148,16 @@ export async function POST(req: Request) {
             institution: mapped.institution || null,
             course: mapped.course || null,
             deploymentState: mapped.deploymentState || null,
+            originState: mapped.originState || null,
+            campAddress: mapped.campAddress || null,
+            stream: mapped.stream || null,
             batchYear: mapped.batchYear || null,
             lgaCode: mapped.lgaCode || null,
             zoneCode: mapped.zoneCode || null,
-            status: "VERIFIED",
+            photographUrl: mapped.photographUrl || null,
+            dateOfBirth: dob,
+            notes: noteBits.length ? noteBits.join(" | ") : null,
+            status: mapped.platoonCode ? "PLATOON_ASSIGNED" : "VERIFIED",
             createdById: auth.payload.sub,
           },
         });
