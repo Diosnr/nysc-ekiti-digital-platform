@@ -6,6 +6,13 @@ import { writeAudit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
+function canViewNin(roles: string[], permissions: string[]): boolean {
+  if (permissions.includes("*") || permissions.includes("bank:register") || permissions.includes("bank:update")) {
+    return true;
+  }
+  return roles.some((r) => r.toLowerCase().includes("bank account") || r.toLowerCase() === "super admin");
+}
+
 export async function GET(req: Request, { params }: Params) {
   const auth = await requireAuth(req, "pcm:read");
   if (auth instanceof Response) return auth;
@@ -30,6 +37,12 @@ export async function GET(req: Request, { params }: Params) {
   });
 
   if (!pcm) return jsonError("PCM not found", 404);
+
+  if (!canViewNin(auth.payload.roles, auth.payload.permissions)) {
+    const { ninRecords: _n, ...rest } = pcm;
+    return jsonOk({ pcm: { ...rest, ninRecords: [] } });
+  }
+
   return jsonOk({ pcm });
 }
 
