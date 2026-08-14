@@ -140,14 +140,14 @@ enum PcmLifecycleStatus {
   COMPLETED
 }
 
-/// Grounds for leaving camp early
+// Grounds for leaving camp early
 enum CampExitGround {
   MARITAL
   MEDICAL
   TERRORISM
 }
 
-/// Workflow stage awaiting the next approver
+// Workflow stage awaiting the next approver
 enum CampExitStage {
   AWAITING_CLINIC
   AWAITING_CAMP_DIRECTOR
@@ -180,7 +180,7 @@ model Pcm {
   status                PcmLifecycleStatus @default(VERIFIED)
   campExitGrantedAt     DateTime?
   campExitGrantedById   String?
-  /// Latest exit ground stamped on profile (from approved request)
+  // Latest exit ground stamped on profile
   exitGround            String?
   exitReason            String?
   exitDestinationState  String?
@@ -214,34 +214,31 @@ model Pcm {
   @@index([checkedOutAt])
 }
 
-/**
- * Camp exit request chain:
- * Platoon initiates → (Clinic if MEDICAL) → Camp Director → State Coordinator.
- * Approvals stamp the person's real name, not only role.
- */
+// Camp exit: Platoon initiates -> Clinic if MEDICAL -> Camp Director -> State Coordinator.
+// Approvals stamp the person's real name, not only role.
 model CampExitRequest {
   id              String         @id @default(cuid())
   pcmId           String
   pcm             Pcm            @relation(fields: [pcmId], references: [id], onDelete: Cascade)
   ground          CampExitGround
   reasonDetail    String?
-  photoUrlsJson   String?        // JSON array of evidence image URLs
+  photoUrlsJson   String?
   stage           CampExitStage
-  /// Initiator (platoon officer)
+  // Initiator (platoon officer)
   initiatedById   String
   initiatedByName String
   initiatedAt     DateTime       @default(now())
-  /// Clinic (medical path only)
+  // Clinic (medical path only)
   clinicById      String?
   clinicByName    String?
   clinicAt        DateTime?
   clinicNote      String?
-  /// Camp Director
+  // Camp Director
   directorById    String?
   directorByName  String?
   directorAt      DateTime?
   directorNote    String?
-  /// State Coordinator (final)
+  // State Coordinator (final)
   coordinatorById   String?
   coordinatorByName String?
   coordinatorAt     DateTime?
