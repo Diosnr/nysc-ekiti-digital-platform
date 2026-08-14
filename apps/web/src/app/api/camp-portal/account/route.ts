@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const callUpNumber = String(body.callUpNumber ?? "").trim();
     const fullName = String(body.fullName ?? "").trim();
-    const nin = body.nin ? String(body.nin).trim() : "";
+    const nin = body.nin ? String(body.nin).replace(/\D/g, "").slice(0, 11) : "";
     const front = body.ninFrontDataUrl ? String(body.ninFrontDataUrl) : "";
     const back = body.ninBackDataUrl ? String(body.ninBackDataUrl) : "";
 
@@ -18,7 +18,10 @@ export async function POST(req: Request) {
       return jsonError("NIN front image is required");
     }
 
-    const frontUrl = await uploadDataUriToCloudinary(front, `nin_front_${callUpNumber}`);
+    const frontUrl = await uploadDataUriToCloudinary(
+      front,
+      `nin_front_${callUpNumber}`
+    );
     if (!frontUrl) {
       return jsonError(
         "Could not upload NIN image. Check Cloudinary configuration.",
@@ -31,23 +34,23 @@ export async function POST(req: Request) {
     }
 
     const pcm = await prisma.pcm.findUnique({ where: { callUpNumber } });
-    if (pcm) {
-      const note = [
-        pcm.notes,
-        `[NIN] nin=${nin || "-"}; front=${frontUrl}; back=${backUrl || "-"}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-      await prisma.pcm.update({ where: { id: pcm.id }, data: { notes: note } });
-      return jsonOk({ linked: true, pcmId: pcm.id, frontUrl, backUrl });
-    }
+    const row = await prisma.pcmNinRecord.create({
+      data: {
+        pcmId: pcm?.id ?? null,
+        callUpNumber,
+        fullName,
+        nin: nin || null,
+        frontUrl,
+        backUrl,
+      },
+    });
 
     return jsonOk({
-      linked: false,
+      linked: Boolean(pcm),
+      id: row.id,
+      pcmId: pcm?.id,
       frontUrl,
       backUrl,
-      message:
-        "Images uploaded. Call-up not in registry yet — staff can attach after intake.",
     });
   } catch (e) {
     console.error(e);

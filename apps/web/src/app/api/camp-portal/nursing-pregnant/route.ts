@@ -6,31 +6,59 @@ export async function POST(req: Request) {
     const body = await req.json();
     const callUpNumber = String(body.callUpNumber ?? "").trim();
     const fullName = String(body.fullName ?? "").trim();
+    const address = String(body.address ?? body.husbandAddress ?? "").trim();
+    const statuses: string[] = Array.isArray(body.statuses)
+      ? body.statuses.map(String)
+      : body.status
+        ? [String(body.status)]
+        : [];
+
     if (!callUpNumber || !fullName) {
       return jsonError("Call-up number and full name are required");
     }
+    if (!address) return jsonError("Address is required");
+    if (statuses.length === 0) return jsonError("Select at least one status");
 
-    const pcm = await prisma.pcm.findUnique({ where: { callUpNumber } });
-    // Store as note on PCM when found; always accept submission for camp workflow
-    if (pcm) {
-      const note = [
-        pcm.notes,
-        `[Nursing/Pregnant] status=${body.status}; husband=${body.husbandName || "-"}; address=${body.husbandAddress}; state=${body.residenceState || "-"}; LGA=${body.residenceLga || "-"}; community=${body.residenceCommunity || "-"}; phone=${body.phone || "-"}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-      await prisma.pcm.update({
-        where: { id: pcm.id },
-        data: { notes: note, phone: body.phone ? String(body.phone) : pcm.phone },
-      });
-      return jsonOk({ linked: true, pcmId: pcm.id });
+    const hasSingle = statuses.includes("single_mother");
+    const hasMarriedPath =
+      statuses.includes("pregnant") || statuses.includes("nursing");
+    if (hasSingle && hasMarriedPath) {
+      return jsonError(
+        "Single mother cannot be combined with pregnant or nursing mother"
+      );
     }
 
-    return jsonOk({
-      linked: false,
-      message:
-        "Saved for camp review. Call-up not yet in registry — staff can link after intake.",
+    const pcm = await prisma.pcm.findUnique({ where: { callUpNumber } });
+
+    const row = await prisma.pcmFamilyStatus.create({
+      data: {
+        pcmId: pcm?.id ?? null,
+        callUpNumber,
+        fullName,
+        statusesJson: JSON.stringify(statuses),
+        husbandName: hasSingle
+          ? null
+          : body.husbandName
+            ? String(body.husbandName).trim()
+            : null,
+        address,
+        state: body.residenceState ? String(body.residenceState) : null,
+        lga: body.residenceLga ? String(body.residenceLga) : null,
+        community: body.residenceCommunity
+          ? String(body.residenceCommunity)
+          : null,
+        phone: body.phone ? String(body.phone).replace(/\D/g, "") : null,
+      },
     });
+
+    if (pcm && body.phone) {
+      await prisma.pcm.update({
+        where: { id: pcm.id },
+        data: { phone: String(body.phone).replace(/\D/g, "") || pcm.phone },
+      });
+    }
+
+    return jsonOk({ linked: Boolean(pcm), id: row.id, pcmId: pcm?.id });
   } catch (e) {
     console.error(e);
     return jsonError(e instanceof Error ? e.message : "Failed", 400);

@@ -21,14 +21,18 @@ export async function GET(req: Request, { params }: Params) {
     where: {
       AND: [{ id }, pcmScopeWhere(scope)],
     },
-    include: { verifications: { orderBy: { verifiedAt: "desc" }, take: 5 } },
+    include: {
+      verifications: { orderBy: { verifiedAt: "desc" }, take: 5 },
+      familyStatuses: { orderBy: { createdAt: "desc" }, take: 10 },
+      skillProfiles: { orderBy: { createdAt: "desc" }, take: 10 },
+      ninRecords: { orderBy: { createdAt: "desc" }, take: 10 },
+    },
   });
 
   if (!pcm) return jsonError("PCM not found", 404);
   return jsonOk({ pcm });
 }
 
-/** Super Admin only — permanently delete a PCM and related verification rows. */
 export async function DELETE(req: Request, { params }: Params) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;

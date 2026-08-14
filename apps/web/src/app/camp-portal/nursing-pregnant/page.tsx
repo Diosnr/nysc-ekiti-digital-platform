@@ -4,19 +4,49 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { CallUpLookup } from "@/components/CallUpLookup";
 import { EKITI_LGAS, NIGERIA_STATES } from "@/lib/nigeria";
+import { lettersOnly, phoneDigits } from "@/lib/sanitize";
 
 type Community = { id: string; name: string; lga: string | null; state: string | null };
 
-export default function EkitiMarriedWomenPage() {
+const STATUS_OPTS = [
+  { key: "pregnant", label: "Pregnant" },
+  { key: "nursing", label: "Nursing mother" },
+  { key: "single_mother", label: "Single mother" },
+] as const;
+
+type StatusKey = (typeof STATUS_OPTS)[number]["key"];
+
+export default function SpecialStatusPage() {
   const [pcm, setPcm] = useState<{ callUpNumber: string; fullName: string } | null>(
     null
   );
+  const [statuses, setStatuses] = useState<StatusKey[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
   const [state, setState] = useState("Ekiti");
   const [lga, setLga] = useState("");
+  const [husbandName, setHusbandName] = useState("");
+  const [phone, setPhone] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const isSingleMother = statuses.includes("single_mother");
+  const isMarriedPath =
+    statuses.includes("pregnant") || statuses.includes("nursing");
+
+  function toggleStatus(key: StatusKey) {
+    setStatuses((prev) => {
+      const has = prev.includes(key);
+      if (key === "single_mother") {
+        // Exclusive with pregnant/nursing
+        return has ? [] : ["single_mother"];
+      }
+      // Selecting pregnant/nursing clears single_mother
+      const withoutSingle = prev.filter((s) => s !== "single_mother");
+      if (has) return withoutSingle.filter((s) => s !== key);
+      return [...withoutSingle, key];
+    });
+  }
 
   useEffect(() => {
     const qs = new URLSearchParams();
@@ -34,6 +64,10 @@ export default function EkitiMarriedWomenPage() {
       setError("Search and select a registered call-up number first");
       return;
     }
+    if (statuses.length === 0) {
+      setError("Select at least one status");
+      return;
+    }
     setLoading(true);
     setError(null);
     setMsg(null);
@@ -41,14 +75,19 @@ export default function EkitiMarriedWomenPage() {
     const body = {
       callUpNumber: pcm.callUpNumber,
       fullName: pcm.fullName,
-      status: String(fd.get("status") || ""),
-      husbandName: String(fd.get("husbandName") || ""),
-      husbandAddress: String(fd.get("husbandAddress") || ""),
+      statuses,
+      husbandName: isSingleMother ? undefined : husbandName.trim() || undefined,
+      address: String(fd.get("address") || "").trim(),
       residenceState: state,
       residenceLga: lga,
       residenceCommunity: String(fd.get("residenceCommunity") || ""),
-      phone: String(fd.get("phone") || ""),
+      phone: phone || undefined,
     };
+    if (!body.address) {
+      setError("Address is required");
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch("/api/camp-portal/nursing-pregnant", {
         method: "POST",
@@ -60,8 +99,11 @@ export default function EkitiMarriedWomenPage() {
         setError(json.error ?? "Submission failed");
         return;
       }
-      setMsg("Submitted successfully. Keep your call-up number for camp.");
+      setMsg("Submitted successfully.");
       e.currentTarget.reset();
+      setStatuses([]);
+      setHusbandName("");
+      setPhone("");
       setPcm(null);
     } catch {
       setError("Network error");
@@ -70,18 +112,15 @@ export default function EkitiMarriedWomenPage() {
     }
   }
 
-  const lgaOptions =
-    state === "Ekiti" ? [...EKITI_LGAS] : [];
-
   return (
     <main className="mx-auto max-w-xl px-4 py-12 sm:px-6">
       <Link href="/" className="text-sm font-medium text-nysc-green hover:underline">
         ← Home
       </Link>
-      <h1 className="mt-4 text-2xl font-bold text-slate-900">Ekiti Married Women</h1>
+      <h1 className="mt-4 text-2xl font-bold text-slate-900">Special Status</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Capture status and husband’s address for posting. Search your registered call-up
-        number first.
+        Pregnant, nursing mother, or single mother — for posting and welfare. Search your
+        registered call-up first.
       </p>
 
       {error && (
@@ -103,38 +142,52 @@ export default function EkitiMarriedWomenPage() {
             onSubmit={onSubmit}
             className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
           >
-            <fieldset className="space-y-2">
-              <legend className="text-xs font-semibold uppercase text-slate-500">Status *</legend>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="status" value="pregnant" required /> Pregnant
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="status" value="nursing" /> Nursing mother
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="radio" name="status" value="both" /> Both
-              </label>
+            <fieldset>
+              <legend className="text-xs font-semibold uppercase text-slate-500">
+                Status * (select all that apply)
+              </legend>
+              <p className="mt-1 text-xs text-slate-500">
+                Single mother cannot be combined with pregnant or nursing mother.
+              </p>
+              <div className="mt-3 space-y-2">
+                {STATUS_OPTS.map((o) => (
+                  <label key={o.key} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={statuses.includes(o.key)}
+                      onChange={() => toggleStatus(o.key)}
+                    />
+                    {o.label}
+                  </label>
+                ))}
+              </div>
             </fieldset>
+
+            {!isSingleMother && isMarriedPath && (
+              <div>
+                <label className="text-xs font-semibold uppercase text-slate-500">
+                  Husband’s full name
+                </label>
+                <input
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  value={husbandName}
+                  onChange={(e) => setHusbandName(lettersOnly(e.target.value))}
+                />
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-semibold uppercase text-slate-500">
-                Husband’s full name
-              </label>
-              <input
-                name="husbandName"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold uppercase text-slate-500">
-                Husband’s address *
+                {isSingleMother ? "Address *" : "Husband’s address *"}
               </label>
               <textarea
-                name="husbandAddress"
+                name="address"
                 required
                 rows={3}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
             </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="text-xs font-semibold uppercase text-slate-500">State *</label>
@@ -164,7 +217,7 @@ export default function EkitiMarriedWomenPage() {
                     onChange={(e) => setLga(e.target.value)}
                   >
                     <option value="">Select LGA…</option>
-                    {lgaOptions.map((x) => (
+                    {EKITI_LGAS.map((x) => (
                       <option key={x} value={x}>
                         {x}
                       </option>
@@ -175,12 +228,13 @@ export default function EkitiMarriedWomenPage() {
                     required
                     className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                     value={lga}
-                    onChange={(e) => setLga(e.target.value)}
+                    onChange={(e) => setLga(lettersOnly(e.target.value))}
                     placeholder="Enter LGA"
                   />
                 )}
               </div>
             </div>
+
             <div>
               <label className="text-xs font-semibold uppercase text-slate-500">
                 Community / town
@@ -198,23 +252,22 @@ export default function EkitiMarriedWomenPage() {
                   </option>
                 ))}
               </select>
-              {communities.length === 0 && (
-                <p className="mt-1 text-xs text-slate-500">
-                  No communities listed yet. Super Admin can add them under Staff → Communities.
-                </p>
-              )}
             </div>
+
             <div>
               <label className="text-xs font-semibold uppercase text-slate-500">Phone</label>
               <input
-                name="phone"
                 type="tel"
+                inputMode="tel"
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={phone}
+                onChange={(e) => setPhone(phoneDigits(e.target.value))}
               />
             </div>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || statuses.length === 0}
               className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
               {loading ? "Submitting…" : "Submit"}
