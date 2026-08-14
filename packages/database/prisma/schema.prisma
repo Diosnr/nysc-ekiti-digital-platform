@@ -20,6 +20,8 @@ model User {
   post             String?
   lgaCode          String?
   zoneCode         String?
+  // Current platoon for Platoon Officer (1–10). Rotations close tenure rows.
+  platoonCode      String?
   isActive         Boolean   @default(true)
   activationToken  String?
   activationSentAt DateTime?
@@ -32,10 +34,32 @@ model User {
   auditLogs     AuditLog[]     @relation("AuditActor")
   refreshTokens RefreshToken[]
   pcmsCreated   Pcm[]          @relation("PcmCreatedBy")
+  platoonTenures PlatoonOfficerTenure[]
 
   @@index([lgaCode])
   @@index([zoneCode])
+  @@index([platoonCode])
   @@index([isActive])
+}
+
+// Audit trail of which officer covered which platoon over time (rotations)
+model PlatoonOfficerTenure {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platoonCode     String
+  officerName     String
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+  assignedById    String?
+  assignedByName  String?
+  note            String?
+  createdAt       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([platoonCode])
+  @@index([startedAt])
+  @@index([endedAt])
 }
 
 model RefreshToken {
@@ -188,11 +212,9 @@ model Pcm {
   lgiPhone              String?
   ziName                String?
   ziPhone               String?
-  // Platoon (status action, not file dump)
   platoonCode           String?
   platoonAssignedAt     DateTime?
   platoonAssignedByName String?
-  // Kit issue (status action)
   kitIssuedAt           DateTime?
   kitIssuedByName       String?
   kitItemsJson          String?
@@ -223,15 +245,15 @@ model Pcm {
 }
 
 model PlatoonAttendance {
-  id           String   @id @default(cuid())
-  pcmId        String
-  pcm          Pcm      @relation(fields: [pcmId], references: [id], onDelete: Cascade)
-  date         DateTime @db.Date
-  present      Boolean  @default(true)
-  recordedById String?
+  id             String   @id @default(cuid())
+  pcmId          String
+  pcm            Pcm      @relation(fields: [pcmId], references: [id], onDelete: Cascade)
+  date           DateTime @db.Date
+  present        Boolean  @default(true)
+  recordedById   String?
   recordedByName String?
-  note         String?
-  createdAt    DateTime @default(now())
+  note           String?
+  createdAt      DateTime @default(now())
 
   @@unique([pcmId, date])
   @@index([date])
@@ -239,34 +261,34 @@ model PlatoonAttendance {
 }
 
 model CampExitRequest {
-  id              String         @id @default(cuid())
-  pcmId           String
-  pcm             Pcm            @relation(fields: [pcmId], references: [id], onDelete: Cascade)
-  ground          CampExitGround
-  reasonDetail    String?
-  photoUrlsJson   String?
-  stage           CampExitStage
-  initiatedById   String
-  initiatedByName String
-  initiatedAt     DateTime       @default(now())
-  clinicById      String?
-  clinicByName    String?
-  clinicAt        DateTime?
-  clinicNote      String?
-  directorById    String?
-  directorByName  String?
-  directorAt      DateTime?
-  directorNote    String?
+  id                String         @id @default(cuid())
+  pcmId             String
+  pcm               Pcm            @relation(fields: [pcmId], references: [id], onDelete: Cascade)
+  ground            CampExitGround
+  reasonDetail      String?
+  photoUrlsJson     String?
+  stage             CampExitStage
+  initiatedById     String
+  initiatedByName   String
+  initiatedAt       DateTime       @default(now())
+  clinicById        String?
+  clinicByName      String?
+  clinicAt          DateTime?
+  clinicNote        String?
+  directorById      String?
+  directorByName    String?
+  directorAt        DateTime?
+  directorNote      String?
   coordinatorById   String?
   coordinatorByName String?
   coordinatorAt     DateTime?
   coordinatorNote   String?
-  rejectedById    String?
-  rejectedByName  String?
-  rejectedAt      DateTime?
-  rejectReason    String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  rejectedById      String?
+  rejectedByName    String?
+  rejectedAt        DateTime?
+  rejectReason      String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([pcmId])
   @@index([stage])
@@ -370,22 +392,21 @@ model Community {
   @@index([name])
 }
 
-// Tracks bulk registration CSV imports (chunked client → server)
 model RegistrationImportJob {
-  id           String   @id @default(cuid())
-  startedById  String?
+  id            String   @id @default(cuid())
+  startedById   String?
   startedByName String?
-  fileName     String?
-  totalRows    Int      @default(0)
-  processed    Int      @default(0)
-  createdCount Int      @default(0)
-  updatedCount Int      @default(0)
-  skippedCount Int      @default(0)
-  errorCount   Int      @default(0)
-  status       String   @default("RUNNING")
-  errorSample  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  fileName      String?
+  totalRows     Int      @default(0)
+  processed     Int      @default(0)
+  createdCount  Int      @default(0)
+  updatedCount  Int      @default(0)
+  skippedCount  Int      @default(0)
+  errorCount    Int      @default(0)
+  status        String   @default("RUNNING")
+  errorSample   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([status])
   @@index([createdAt])
