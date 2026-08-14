@@ -21,7 +21,10 @@ export async function POST(req: Request) {
     }
     const allowed =
       hasPermission(payload.permissions, "pcm:create") ||
-      hasPermission(payload.permissions, "pcm:verify");
+      hasPermission(payload.permissions, "pcm:verify") ||
+      payload.roles?.includes("Security Officer") ||
+      payload.roles?.includes("Registration Officer") ||
+      payload.roles?.includes("Super Admin");
     if (!allowed) {
       return jsonError("Forbidden", 403);
     }
@@ -162,13 +165,6 @@ export async function POST(req: Request) {
               batchYear,
               dateReporting,
               hasPhoto: true,
-              photoHost: (() => {
-                try {
-                  return new URL(photographUrl!).hostname;
-                } catch {
-                  return "unknown";
-                }
-              })(),
             }),
             verifiedAt: new Date(),
           },
@@ -219,7 +215,10 @@ export async function POST(req: Request) {
     const message = e instanceof Error ? e.message : "Intake failed";
     console.error("pcm intake", e);
     if (/P1001|P2021|does not exist|Can't reach database/i.test(message)) {
-      return jsonError("Database not ready. Run prisma db push against Neon.", 503);
+      return jsonError(
+        "Database schema updating — retry in a minute after deploy finishes.",
+        503
+      );
     }
     return jsonError(message, 400);
   }
