@@ -69,7 +69,6 @@ export default function GrantExitPage() {
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState("");
 
-  // Initiate form
   const [q, setQ] = useState("");
   const [pcmHit, setPcmHit] = useState<{
     id: string;
@@ -240,7 +239,6 @@ export default function GrantExitPage() {
 
   function onPhotoFiles(files: FileList | null) {
     if (!files?.length) return;
-    // Data URLs for evidence (Cloudinary later); keep small count
     Array.from(files)
       .slice(0, 4)
       .forEach((file) => {
@@ -266,7 +264,7 @@ export default function GrantExitPage() {
       <h1 className="text-2xl font-bold text-slate-900">Camp exit</h1>
       <p className="mt-1 text-sm text-slate-600">
         Chain: Platoon initiates → Clinic (medical only) → Camp Director → State
-        Coordinator. Approvals stamp the officer’s name.
+        Coordinator. Approvals stamp the officer's name.
       </p>
 
       {error && (
@@ -310,17 +308,18 @@ export default function GrantExitPage() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <button
-              type="submit"
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
+            <button type="submit" className="rounded-md border border-slate-300 px-3 py-2 text-sm">
               Find
             </button>
           </form>
           {pcmHit && (
             <form onSubmit={initiate} className="space-y-3 border-t border-slate-100 pt-4">
               <div className="flex gap-3">
-                <PcmPhoto url={pcmHit.photographUrl} alt={pcmHit.fullName} size="sm" />
+                <PcmPhoto
+                  url={pcmHit.photographUrl}
+                  alt={pcmHit.fullName}
+                  sizeClass="h-14 w-14"
+                />
                 <div>
                   <p className="font-semibold">{pcmHit.fullName}</p>
                   <p className="font-mono text-xs text-slate-600">{pcmHit.callUpNumber}</p>
@@ -351,9 +350,7 @@ export default function GrantExitPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold uppercase text-slate-500">
-                  Evidence photos
-                </label>
+                <label className="text-xs font-semibold uppercase text-slate-500">Evidence photos</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -395,15 +392,13 @@ export default function GrantExitPage() {
                     <PcmPhoto
                       url={r.pcm.photographUrl}
                       alt={r.pcm.fullName}
-                      size="sm"
+                      sizeClass="h-12 w-12"
                     />
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-900">{r.pcm.fullName}</p>
                       <p className="font-mono text-xs text-slate-500">{r.pcm.callUpNumber}</p>
                       <p className="mt-0.5 text-xs text-slate-600">
-                        <span className="font-medium text-nysc-green">
-                          {groundLabel(r.ground)}
-                        </span>
+                        <span className="font-medium text-nysc-green">{groundLabel(r.ground)}</span>
                         {" · "}
                         {stageLabel(r.stage)}
                         {" · by "}
@@ -418,7 +413,6 @@ export default function GrantExitPage() {
         </div>
       )}
 
-      {/* Detail drawer */}
       {(selected || detailLoading) && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <button
@@ -441,23 +435,14 @@ export default function GrantExitPage() {
                     ← Close
                   </button>
                   <div className="mt-3 flex gap-4">
-                    <PcmPhoto
-                      url={selected.pcm.photographUrl}
-                      alt={selected.pcm.fullName}
-                    />
+                    <PcmPhoto url={selected.pcm.photographUrl} alt={selected.pcm.fullName} />
                     <div>
-                      <h2 className="text-lg font-bold text-slate-900">
-                        {selected.pcm.fullName}
-                      </h2>
-                      <p className="font-mono text-sm text-slate-600">
-                        {selected.pcm.callUpNumber}
-                      </p>
+                      <h2 className="text-lg font-bold text-slate-900">{selected.pcm.fullName}</h2>
+                      <p className="font-mono text-sm text-slate-600">{selected.pcm.callUpNumber}</p>
                       <p className="mt-2 inline-flex rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
                         {groundLabel(selected.ground)}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {stageLabel(selected.stage)}
-                      </p>
+                      <p className="mt-1 text-xs text-slate-500">{stageLabel(selected.stage)}</p>
                     </div>
                   </div>
                 </div>
@@ -469,9 +454,7 @@ export default function GrantExitPage() {
                     <p>Deployment: {selected.pcm.deploymentState || "—"}</p>
                     <p>Reporting: {selected.pcm.dateReporting || "—"}</p>
                     {selected.reasonDetail && (
-                      <p className="mt-2 rounded-md bg-slate-50 p-2 text-slate-700">
-                        {selected.reasonDetail}
-                      </p>
+                      <p className="mt-2 rounded-md bg-slate-50 p-2 text-slate-700">{selected.reasonDetail}</p>
                     )}
                   </section>
 
@@ -481,21 +464,14 @@ export default function GrantExitPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {selected.photoUrls.map((u, i) => (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            key={i}
-                            src={u}
-                            alt=""
-                            className="h-20 w-20 rounded object-cover"
-                          />
+                          <img key={i} src={u} alt="" className="h-20 w-20 rounded object-cover" />
                         ))}
                       </div>
                     </section>
                   )}
 
                   <section>
-                    <h3 className="text-xs font-semibold uppercase text-slate-500">
-                      Approval trail (names)
-                    </h3>
+                    <h3 className="text-xs font-semibold uppercase text-slate-500">Approval trail (names)</h3>
                     <ul className="mt-2 space-y-2 text-slate-700">
                       <li>
                         Initiated by <strong>{selected.initiatedByName}</strong>
@@ -529,27 +505,16 @@ export default function GrantExitPage() {
                     </ul>
                   </section>
 
-                  {Array.isArray(selected.pcm.familyStatuses) &&
-                    selected.pcm.familyStatuses.length > 0 && (
-                      <section>
-                        <h3 className="text-xs font-semibold uppercase text-slate-500">
-                          Special status / family
-                        </h3>
-                        <p className="mt-1 text-slate-600">
-                          {selected.pcm.familyStatuses.length} record(s) on file
-                        </p>
-                      </section>
-                    )}
+                  {Array.isArray(selected.pcm.familyStatuses) && selected.pcm.familyStatuses.length > 0 && (
+                    <section>
+                      <h3 className="text-xs font-semibold uppercase text-slate-500">Special status / family</h3>
+                      <p className="mt-1 text-slate-600">{selected.pcm.familyStatuses.length} record(s) on file</p>
+                    </section>
+                  )}
 
-                  {canActOnStage(
-                    selected.stage,
-                    roles,
-                    perms
-                  ) && (
+                  {canActOnStage(selected.stage, roles, perms) && (
                     <section className="border-t border-slate-100 pt-4">
-                      <label className="text-xs font-semibold uppercase text-slate-500">
-                        Note (optional)
-                      </label>
+                      <label className="text-xs font-semibold uppercase text-slate-500">Note (optional)</label>
                       <textarea
                         rows={2}
                         className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
