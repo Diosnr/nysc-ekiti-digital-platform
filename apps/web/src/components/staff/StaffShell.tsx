@@ -36,6 +36,11 @@ const nav: NavItem[] = [
     perm: "registration:complete",
   },
   {
+    href: "/staff/exit",
+    label: "Grant exit",
+    perm: "camp:exeat",
+  },
+  {
     href: "/staff/admin/camp-addresses",
     label: "Camp addresses",
     perm: "camp:address:manage",
@@ -54,7 +59,6 @@ const nav: NavItem[] = [
 
 export function StaffShell({ children }: { children: React.ReactNode }) {
   const nested = useContext(ShellCtx);
-  // Pages still wrapping StaffShell: only render children (layout owns chrome)
   if (nested) return <>{children}</>;
 
   return (
@@ -117,12 +121,17 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const isRegistration =
     roles.includes("Registration Officer") ||
     perms.includes("registration:complete");
+  const isExitApprover =
+    roles.includes("State Coordinator") ||
+    roles.includes("Camp Director") ||
+    perms.includes("camp:exeat");
 
   const can = (p: string | null) => {
     if (!p) return true;
     if (isSuper || perms.includes("*") || perms.includes(p)) return true;
     if (p === "pcm:read" && perms.includes("pcm:search")) return true;
     if (p === "registration:complete" && isRegistration) return true;
+    if (p === "camp:exeat" && isExitApprover) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
     }
