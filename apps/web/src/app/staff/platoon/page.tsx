@@ -11,15 +11,12 @@ type PcmHit = {
   fullName: string;
   photographUrl?: string | null;
   status?: string;
+  stateCode?: string | null;
   platoonCode?: string | null;
-  platoonAssignedAt?: string | null;
-  platoonAssignedByName?: string | null;
   kitIssuedAt?: string | null;
   kitIssuedByName?: string | null;
-  kitItemsJson?: string | null;
 };
 
-const PLATOONS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
 const KIT_ITEMS = [
   "Khaki uniform",
   "White vest",
@@ -30,10 +27,9 @@ const KIT_ITEMS = [
 ];
 
 export default function PlatoonDeskPage() {
-  const [tab, setTab] = useState<"platoon" | "kit" | "attendance">("platoon");
+  const [tab, setTab] = useState<"kit" | "attendance">("kit");
   const [q, setQ] = useState("");
   const [pcm, setPcm] = useState<PcmHit | null>(null);
-  const [platoonCode, setPlatoonCode] = useState("A");
   const [kitItems, setKitItems] = useState<string[]>([...KIT_ITEMS]);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -61,37 +57,14 @@ export default function PlatoonDeskPage() {
         return;
       }
       const hit =
-        list.find((p) => p.callUpNumber.toLowerCase() === q.trim().toLowerCase()) ??
-        list[0];
+        list.find(
+          (p) =>
+            p.callUpNumber.toLowerCase() === q.trim().toLowerCase() ||
+            (p.stateCode || "").toLowerCase() === q.trim().toLowerCase()
+        ) ?? list[0];
       const det = await staffFetch(`/api/pcm/${hit.id}`);
       const full = det.ok ? await det.json() : { pcm: hit };
-      const p = (full.pcm ?? hit) as PcmHit;
-      setPcm(p);
-      if (p.platoonCode) setPlatoonCode(p.platoonCode);
-    } catch {
-      setError("Network error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function assignPlatoon() {
-    if (!pcm) return;
-    setLoading(true);
-    setError(null);
-    setMsg(null);
-    try {
-      const res = await staffFetch(`/api/pcm/${pcm.id}/platoon`, {
-        method: "PATCH",
-        body: JSON.stringify({ platoonCode }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? "Assign failed");
-        return;
-      }
-      setPcm(data.pcm);
-      setMsg(`Assigned to Platoon ${data.pcm.platoonCode}`);
+      setPcm((full.pcm ?? hit) as PcmHit);
     } catch {
       setError("Network error");
     } finally {
@@ -156,8 +129,8 @@ export default function PlatoonDeskPage() {
     <StaffShell>
       <h1 className="text-2xl font-bold text-slate-900">Platoon desk</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Assign platoon, issue kit, and take daily attendance — status actions on the corps
-        member file.
+        Issue kit and take attendance. Platoon assignment is done by Registration (from state
+        code).
       </p>
 
       {error && (
@@ -174,7 +147,6 @@ export default function PlatoonDeskPage() {
       <div className="mt-6 flex flex-wrap gap-2">
         {(
           [
-            ["platoon", "Assign platoon"],
             ["kit", "Issue kit"],
             ["attendance", "Attendance"],
           ] as const
@@ -197,7 +169,7 @@ export default function PlatoonDeskPage() {
       <form onSubmit={search} className="mt-6 flex flex-wrap gap-2">
         <input
           className="min-w-[220px] flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-          placeholder="Call-up or name"
+          placeholder="State code, call-up, or name"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -217,15 +189,13 @@ export default function PlatoonDeskPage() {
             <div>
               <p className="text-lg font-bold text-slate-900">{pcm.fullName}</p>
               <p className="font-mono text-sm text-slate-600">{pcm.callUpNumber}</p>
-              <p className="mt-1 text-xs text-slate-500">Status: {pcm.status}</p>
-              {pcm.platoonCode && (
-                <p className="text-xs text-slate-600">
-                  Platoon {pcm.platoonCode}
-                  {pcm.platoonAssignedByName
-                    ? ` · by ${pcm.platoonAssignedByName}`
-                    : ""}
-                </p>
+              {pcm.stateCode && (
+                <p className="font-mono text-xs text-slate-500">{pcm.stateCode}</p>
               )}
+              <p className="mt-1 text-xs text-slate-500">
+                {pcm.platoonCode ? `Platoon ${pcm.platoonCode}` : "Platoon not assigned"} ·{" "}
+                {pcm.status}
+              </p>
               {pcm.kitIssuedAt && (
                 <p className="text-xs text-green-700">
                   Kit issued
@@ -234,33 +204,6 @@ export default function PlatoonDeskPage() {
               )}
             </div>
           </div>
-
-          {tab === "platoon" && (
-            <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
-              <label className="text-xs font-semibold uppercase text-slate-500">
-                Platoon code
-              </label>
-              <select
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                value={platoonCode}
-                onChange={(e) => setPlatoonCode(e.target.value)}
-              >
-                {PLATOONS.map((p) => (
-                  <option key={p} value={p}>
-                    Platoon {p}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void assignPlatoon()}
-                className="rounded-md bg-nysc-green px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                Save assignment
-              </button>
-            </div>
-          )}
 
           {tab === "kit" && (
             <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">

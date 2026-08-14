@@ -19,6 +19,8 @@ type Pcm = {
   campAddress?: string | null;
   dateReporting?: string | null;
   batchYear?: string | null;
+  stateCode?: string | null;
+  platoonCode?: string | null;
   familyStatuses?: Array<{
     id: string;
     statusesJson: string;
@@ -56,6 +58,7 @@ export default function PcmRegistryPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
   const [canIntake, setCanIntake] = useState(false);
+  const [canViewNin, setCanViewNin] = useState(false);
 
   async function load(search?: string) {
     setError(null);
@@ -91,6 +94,12 @@ export default function PcmRegistryPage() {
           perms.includes("pcm:verify") ||
           roles.includes("Security Officer") ||
           roles.includes("Registration Officer")
+      );
+      setCanViewNin(
+        superA ||
+          perms.includes("bank:register") ||
+          perms.includes("bank:update") ||
+          roles.some((r) => r.toLowerCase().includes("bank account"))
       );
     });
   }, []);
@@ -150,7 +159,7 @@ export default function PcmRegistryPage() {
       <div className="mt-6 flex gap-2">
         <input
           className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
-          placeholder="Search name, call-up, state…"
+          placeholder="Search name, call-up, state code…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load(q)}
@@ -240,7 +249,6 @@ export default function PcmRegistryPage() {
                 <div className="space-y-3">
                   <div className="h-32 w-32 animate-pulse rounded-xl bg-slate-200" />
                   <div className="h-5 w-2/3 animate-pulse rounded bg-slate-200" />
-                  <div className="h-4 w-1/2 animate-pulse rounded bg-slate-200" />
                 </div>
               )}
               {!detailLoading && detail && (
@@ -268,6 +276,8 @@ export default function PcmRegistryPage() {
                           ["Gender", detail.gender],
                           ["Institution", detail.institution],
                           ["Deployment", detail.deploymentState],
+                          ["State code", detail.stateCode],
+                          ["Platoon", detail.platoonCode ? `Platoon ${detail.platoonCode}` : null],
                           ["Camp", detail.campAddress],
                           ["Reporting", detail.dateReporting],
                           ["Batch", detail.batchYear],
@@ -312,10 +322,6 @@ export default function PcmRegistryPage() {
                             <p className="mt-1 text-slate-600">Husband: {f.husbandName}</p>
                           )}
                           <p className="mt-1 text-slate-600">Address: {f.address}</p>
-                          <p className="text-slate-500">
-                            {[f.state, f.lga, f.community].filter(Boolean).join(" · ")}
-                          </p>
-                          {f.phone && <p className="text-slate-500">Phone: {f.phone}</p>}
                         </div>
                       );
                     })}
@@ -339,40 +345,42 @@ export default function PcmRegistryPage() {
                     ))}
                   </section>
 
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Account / NIN
-                    </h3>
-                    {(detail.ninRecords?.length ?? 0) === 0 && (
-                      <p className="mt-2 text-sm text-slate-500">No submissions yet.</p>
-                    )}
-                    {detail.ninRecords?.map((n) => (
-                      <div
-                        key={n.id}
-                        className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
-                      >
-                        {n.nin && <p>NIN: {n.nin}</p>}
-                        <div className="mt-2 flex gap-2">
-                          {n.frontUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={n.frontUrl}
-                              alt="NIN front"
-                              className="h-20 w-28 rounded border object-cover"
-                            />
-                          )}
-                          {n.backUrl && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={n.backUrl}
-                              alt="NIN back"
-                              className="h-20 w-28 rounded border object-cover"
-                            />
-                          )}
+                  {canViewNin && (
+                    <section>
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Account / NIN
+                      </h3>
+                      {(detail.ninRecords?.length ?? 0) === 0 && (
+                        <p className="mt-2 text-sm text-slate-500">No submissions yet.</p>
+                      )}
+                      {detail.ninRecords?.map((n) => (
+                        <div
+                          key={n.id}
+                          className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
+                        >
+                          {n.nin && <p>NIN: {n.nin}</p>}
+                          <div className="mt-2 flex gap-2">
+                            {n.frontUrl && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={n.frontUrl}
+                                alt="NIN front"
+                                className="h-20 w-28 rounded border object-cover"
+                              />
+                            )}
+                            {n.backUrl && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={n.backUrl}
+                                alt="NIN back"
+                                className="h-20 w-28 rounded border object-cover"
+                              />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </section>
+                      ))}
+                    </section>
+                  )}
 
                   {isSuper && (
                     <button
