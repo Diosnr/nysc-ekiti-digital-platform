@@ -62,7 +62,7 @@ type Tab = "my_queue" | "pending" | "approved" | "rejected" | "initiate";
 
 export default function GrantExitPage() {
   const [me, setMe] = useState<Me | null>(null);
-  const [tab, setTab] = useState<Tab>("my_queue");
+  const [tab, setTab] = useState<Tab | null>(null);
   const [list, setList] = useState<ExitReq[]>([]);
   const [selected, setSelected] = useState<ExitReq | null>(null);
   const [photosLoading, setPhotosLoading] = useState(false);
@@ -85,7 +85,14 @@ export default function GrantExitPage() {
   useEffect(() => {
     staffFetch("/api/auth/me").then(async (res) => {
       if (!res.ok) return;
-      setMe(await res.json());
+      const data = (await res.json()) as Me;
+      setMe(data);
+      const roles = data.roles ?? [];
+      const perms = data.permissions ?? [];
+      const canStart = canInitiateExit(roles, perms);
+      const stage = stageForRoles(roles);
+      // Platoon (initiate-only): land on Initiate; approvers on My queue
+      setTab(canStart && !stage ? "initiate" : "my_queue");
     });
   }, []);
 
@@ -93,8 +100,10 @@ export default function GrantExitPage() {
   const perms = me?.permissions ?? [];
   const myStage = stageForRoles(roles);
   const canStart = me ? canInitiateExit(roles, perms) : false;
+  const activeTab = tab ?? "my_queue";
 
   const loadList = useCallback(async () => {
+    if (!tab || tab === "initiate") return;
     setLoading(true);
     setError(null);
     try {
@@ -104,7 +113,11 @@ export default function GrantExitPage() {
       if (tab === "my_queue" && myStage) {
         url = `/api/exit-requests?stage=${myStage}`;
       }
-      if (tab === "my_queue" && !myStage) {
+      if (tab === "my_queue" && !myStage && canStart) {
+        // Platoon: requests I started
+        url = "/api/exit-requests?mine=1";
+      }
+      if (tab === "my_queue" && !myStage && !canStart) {
         url = "/api/exit-requests?bucket=pending";
       }
       const res = await staffFetch(url);
@@ -119,19 +132,16 @@ export default function GrantExitPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, myStage]);
+  }, [tab, myStage, canStart]);
 
   useEffect(() => {
-    if (tab === "initiate") return;
     void loadList();
-  }, [tab, loadList]);
+  }, [loadList]);
 
-  /** Instant open from list row — no blocking wait */
   function openDetail(row: ExitReq) {
     setError(null);
     setNote("");
     setSelected({ ...row, photoUrls: row.photoUrls ?? [] });
-    // Lazy-load evidence only if any
     if ((row.photoCount ?? 0) > 0 || (row.photoUrls?.length ?? 0) > 0) {
       setPhotosLoading(true);
       staffFetch(`/api/exit-requests/${row.id}?photos=1`)
@@ -234,7 +244,7 @@ export default function GrantExitPage() {
       setQ("");
       setReasonDetail("");
       setPhotoUrls([]);
-      setTab("pending");
+      setTab("my_queue");
     } catch {
       setError("Network error");
     } finally {
@@ -256,13 +266,17 @@ export default function GrantExitPage() {
       });
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "my_queue", label: "My queue" },
+  const tabs: { id: Tab; label: string }[] = [];
+  if (canStart) tabs.push({ id: "initiate", label: "Initiate" });
+  tabs.push({
+    id: "my_queue",
+    label: myStage ? "My queue" : canStart ? "My filings" : "My queue",
+  });
+  tabs.push(
     { id: "pending", label: "All pending" },
     { id: "approved", label: "Approved" },
-    { id: "rejected", label: "Rejected" },
-  ];
-  if (canStart) tabs.push({ id: "initiate", label: "Initiate" });
+    { id: "rejected", label: "Rejected" }
+  );
 
   return (
     <StaffShell>
@@ -292,7 +306,7 @@ export default function GrantExitPage() {
               setSelected(null);
             }}
             className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-              tab === t.id
+              activeTab === t.id
                 ? "bg-nysc-green text-white"
                 : "bg-white text-slate-700 ring-1 ring-slate-200"
             }`}
@@ -302,7 +316,7 @@ export default function GrantExitPage() {
         ))}
       </div>
 
-      {tab === "initiate" && canStart && (
+      {activeTab === "initiate" && canStart && (
         <div className="mt-6 max-w-xl space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="font-semibold text-slate-900">Initiate exit request</h2>
           <form onSubmit={searchPcm} className="flex gap-2">
@@ -374,7 +388,7 @@ export default function GrantExitPage() {
         </div>
       )}
 
-      {tab !== "initiate" && (
+      {activeTab !== "initiate" && (
         <div className="mt-6">
           {loading && !list.length ? (
             <div className="space-y-2">
@@ -425,7 +439,7 @@ export default function GrantExitPage() {
             aria-label="Close"
             onClick={() => setSelected(null)}
           />
-          <aside className="relative z-10 flex h-full w-full max-w-lg animate-in slide-in-from-right flex-col overflow-y-auto bg-white shadow-xl duration-200">
+          <aside className="relative z-10 flex h-full w-full max-w-lg flex-col overflow-y-auto bg-white shadow-xl">
             <div className="border-b border-slate-200 p-5">
               <button
                 type="button"
