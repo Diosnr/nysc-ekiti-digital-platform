@@ -6,8 +6,8 @@ import { useState } from "react";
 const campPortal = [
   {
     href: "/camp-portal/nursing-pregnant",
-    label: "Ekiti Married Women",
-    desc: "Husband address for posting",
+    label: "Special Status",
+    desc: "Pregnant, nursing, or single mother",
   },
   {
     href: "/camp-portal/skills",
