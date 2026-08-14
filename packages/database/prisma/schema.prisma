@@ -169,7 +169,10 @@ model Pcm {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  verifications VerificationRecord[]
+  verifications   VerificationRecord[]
+  familyStatuses  PcmFamilyStatus[]
+  skillProfiles   PcmSkillProfile[]
+  ninRecords      PcmNinRecord[]
 
   @@index([fullName])
   @@index([stateCode])
@@ -195,6 +198,58 @@ model VerificationRecord {
   @@index([verifiedAt])
 }
 
+/// Special status form submissions (pregnant / nursing / single mother)
+model PcmFamilyStatus {
+  id           String   @id @default(cuid())
+  pcmId        String?
+  pcm          Pcm?     @relation(fields: [pcmId], references: [id], onDelete: SetNull)
+  callUpNumber String
+  fullName     String
+  /// JSON array e.g. ["pregnant","nursing"] or ["single_mother"]
+  statusesJson String
+  husbandName  String?
+  /// Address (husband's address when married/nursing/pregnant; plain address for single mother)
+  address      String
+  state        String?
+  lga          String?
+  community    String?
+  phone        String?
+  createdAt    DateTime @default(now())
+
+  @@index([callUpNumber])
+  @@index([pcmId])
+}
+
+model PcmSkillProfile {
+  id           String   @id @default(cuid())
+  pcmId        String?
+  pcm          Pcm?     @relation(fields: [pcmId], references: [id], onDelete: SetNull)
+  callUpNumber String
+  fullName     String
+  skill1       String?
+  skill2       String?
+  skill3       String?
+  createdAt    DateTime @default(now())
+
+  @@index([callUpNumber])
+  @@index([pcmId])
+}
+
+model PcmNinRecord {
+  id           String   @id @default(cuid())
+  pcmId        String?
+  pcm          Pcm?     @relation(fields: [pcmId], references: [id], onDelete: SetNull)
+  callUpNumber String
+  fullName     String
+  nin          String?
+  frontUrl     String?
+  backUrl      String?
+  createdAt    DateTime @default(now())
+
+  @@index([callUpNumber])
+  @@index([pcmId])
+}
+
 model CampAddress {
   id        String   @id @default(cuid())
   name      String
@@ -212,7 +267,6 @@ model CampAddress {
   @@index([sortOrder])
 }
 
-/// Communities / towns for Ekiti Married Women and related forms (admin-managed)
 model Community {
   id        String   @id @default(cuid())
   name      String
