@@ -12,8 +12,8 @@ export async function GET(req: Request) {
   if (auth instanceof Response) return auth;
 
   const url = new URL(req.url);
-  const stage = url.searchParams.get("stage"); // pending bucket or APPROVED|REJECTED
-  const bucket = url.searchParams.get("bucket"); // mine | pending | approved | rejected | all
+  const stage = url.searchParams.get("stage");
+  const bucket = url.searchParams.get("bucket");
 
   const where: Record<string, unknown> = {};
   if (stage) where.stage = stage;
@@ -68,13 +68,13 @@ function safeJson(s: string): string[] {
   }
 }
 
-/** Platoon (or allowed role) initiates exit request */
+/** Platoon officers only may initiate exit requests */
 export async function POST(req: Request) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
 
   if (!canInitiateExit(auth.payload.roles, auth.payload.permissions)) {
-    return jsonError("Only platoon officers (or higher) may initiate exit", 403);
+    return jsonError("Only platoon officers may initiate exit requests", 403);
   }
 
   const body = await req.json();
