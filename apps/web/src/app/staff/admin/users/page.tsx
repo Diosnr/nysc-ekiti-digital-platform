@@ -12,11 +12,19 @@ type UserRow = {
   post: string | null;
   lgaCode: string | null;
   zoneCode: string | null;
+  platoonCode: string | null;
   isActive: boolean;
   roles: string[];
 };
 
 type RoleOption = { id: string; name: string };
+
+const PLATOON_OPTIONS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+
+function isPlatoonRoleName(name: string) {
+  const x = name.toLowerCase();
+  return x.includes("platoon officer") && !x.includes("head");
+}
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -24,6 +32,8 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editPlatoon, setEditPlatoon] = useState("");
   const [form, setForm] = useState({
     email: "",
     name: "",
@@ -32,8 +42,14 @@ export default function AdminUsersPage() {
     post: "",
     lgaCode: "",
     zoneCode: "",
+    platoonCode: "",
     roleIds: [] as string[],
   });
+
+  const selectedRoleNames = roles
+    .filter((r) => form.roleIds.includes(r.id))
+    .map((r) => r.name);
+  const needsPlatoon = selectedRoleNames.some(isPlatoonRoleName);
 
   async function load() {
     const [uRes, rRes] = await Promise.all([
@@ -58,6 +74,10 @@ export default function AdminUsersPage() {
     e.preventDefault();
     setError(null);
     setMsg(null);
+    if (needsPlatoon && !form.platoonCode) {
+      setError("Select platoon 1–10 for Platoon Officer");
+      return;
+    }
     const res = await staffFetch("/api/admin/users", {
       method: "POST",
       body: JSON.stringify({
@@ -68,6 +88,7 @@ export default function AdminUsersPage() {
         post: form.post || null,
         lgaCode: form.lgaCode || null,
         zoneCode: form.zoneCode || null,
+        platoonCode: form.platoonCode || null,
         roleIds: form.roleIds,
       }),
     });
@@ -86,8 +107,30 @@ export default function AdminUsersPage() {
       post: "",
       lgaCode: "",
       zoneCode: "",
+      platoonCode: "",
       roleIds: [],
     });
+    load();
+  }
+
+  async function savePlatoon(userId: string) {
+    setError(null);
+    setMsg(null);
+    if (!editPlatoon || !/^(10|[1-9])$/.test(editPlatoon)) {
+      setError("Platoon must be 1–10");
+      return;
+    }
+    const res = await staffFetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ platoonCode: editPlatoon }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "Update failed");
+      return;
+    }
+    setMsg(`Platoon updated to ${editPlatoon}`);
+    setEditId(null);
     load();
   }
 
@@ -124,7 +167,7 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Users / Officers</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Create officers, assign roles, set LGA/zone scope, issue activation links.
+            Platoon Officers require a platoon number (1–10). Rotations are recorded for audit.
           </p>
         </div>
         <button
@@ -202,6 +245,26 @@ export default function AdminUsersPage() {
             value={form.zoneCode}
             onChange={(e) => setForm({ ...form, zoneCode: e.target.value })}
           />
+          {needsPlatoon && (
+            <div>
+              <label className="text-xs font-semibold uppercase text-slate-500">
+                Platoon number *
+              </label>
+              <select
+                required
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={form.platoonCode}
+                onChange={(e) => setForm({ ...form, platoonCode: e.target.value })}
+              >
+                <option value="">Select 1–10…</option>
+                {PLATOON_OPTIONS.map((p) => (
+                  <option key={p} value={p}>
+                    Platoon {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="sm:col-span-2">
             <p className="mb-2 text-sm font-medium text-slate-700">Roles</p>
             <div className="flex flex-wrap gap-2">
@@ -244,36 +307,89 @@ export default function AdminUsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-slate-100">
-                <td className="px-4 py-3 font-medium text-slate-900">{u.email}</td>
-                <td className="px-4 py-3 text-slate-600">{u.name ?? "—"}</td>
-                <td className="px-4 py-3 text-slate-600">{u.roles.join(", ") || "—"}</td>
-                <td className="px-4 py-3 text-slate-600">
-                  {[u.lgaCode && `LGA ${u.lgaCode}`, u.zoneCode && `Zone ${u.zoneCode}`]
-                    .filter(Boolean)
-                    .join(" · ") || "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      u.isActive ? "bg-green-50 text-green-800" : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {u.isActive ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => issueActivation(u.id, u.email)}
-                    className="text-xs font-medium text-nysc-green hover:underline"
-                  >
-                    Activation link
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {users.map((u) => {
+              const isPlatoon = u.roles.some(isPlatoonRoleName);
+              return (
+                <tr key={u.id} className="border-b border-slate-100">
+                  <td className="px-4 py-3 font-medium text-slate-900">{u.email}</td>
+                  <td className="px-4 py-3 text-slate-600">{u.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">{u.roles.join(", ") || "—"}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {[
+                      u.platoonCode && `Platoon ${u.platoonCode}`,
+                      u.lgaCode && `LGA ${u.lgaCode}`,
+                      u.zoneCode && `Zone ${u.zoneCode}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        u.isActive
+                          ? "bg-green-50 text-green-800"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {u.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => issueActivation(u.id, u.email)}
+                      className="text-xs font-medium text-nysc-green hover:underline"
+                    >
+                      Activation link
+                    </button>
+                    {isPlatoon && (
+                      <>
+                        {editId === u.id ? (
+                          <span className="inline-flex items-center gap-1">
+                            <select
+                              className="rounded border border-slate-300 text-xs"
+                              value={editPlatoon}
+                              onChange={(e) => setEditPlatoon(e.target.value)}
+                            >
+                              {PLATOON_OPTIONS.map((p) => (
+                                <option key={p} value={p}>
+                                  {p}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-nysc-green"
+                              onClick={() => void savePlatoon(u.id)}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs text-slate-500"
+                              onClick={() => setEditId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-xs font-medium text-slate-700 hover:underline"
+                            onClick={() => {
+                              setEditId(u.id);
+                              setEditPlatoon(u.platoonCode || "1");
+                            }}
+                          >
+                            Edit platoon
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
