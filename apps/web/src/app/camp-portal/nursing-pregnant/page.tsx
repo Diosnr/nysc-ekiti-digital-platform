@@ -3,12 +3,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { CallUpLookup } from "@/components/CallUpLookup";
-import { EKITI_LGAS, NIGERIA_STATES } from "@/lib/nigeria";
+import { NIGERIA_STATES } from "@/lib/nigeria";
 import { lettersOnly, phoneDigits } from "@/lib/sanitize";
 
 type Community = { id: string; name: string; lga: string | null; state: string | null };
 
 const STATUS_OPTS = [
+  { key: "married_woman", label: "Married Women" },
   { key: "pregnant", label: "Pregnant" },
   { key: "nursing", label: "Nursing mother" },
   { key: "single_mother", label: "Single mother" },
@@ -22,6 +23,7 @@ export default function SpecialStatusPage() {
   );
   const [statuses, setStatuses] = useState<StatusKey[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
+  const [lgas, setLgas] = useState<string[]>([]);
   const [state, setState] = useState("Ekiti");
   const [lga, setLga] = useState("");
   const [husbandName, setHusbandName] = useState("");
@@ -31,25 +33,50 @@ export default function SpecialStatusPage() {
   const [loading, setLoading] = useState(false);
 
   const isSingleMother = statuses.includes("single_mother");
-  const isMarriedPath =
-    statuses.includes("pregnant") || statuses.includes("nursing");
+  const isMarriedWoman = statuses.includes("married_woman");
+  const showHusband =
+    isMarriedWoman ||
+    statuses.includes("pregnant") ||
+    statuses.includes("nursing");
 
   function toggleStatus(key: StatusKey) {
     setStatuses((prev) => {
       const has = prev.includes(key);
       if (key === "single_mother") {
-        return has ? [] : ["single_mother"];
+        // Exclusive with Married Women
+        if (has) return prev.filter((s) => s !== "single_mother");
+        return [
+          ...prev.filter((s) => s !== "married_woman"),
+          "single_mother",
+        ];
       }
-      const withoutSingle = prev.filter((s) => s !== "single_mother");
-      if (has) return withoutSingle.filter((s) => s !== key);
-      return [...withoutSingle, key];
+      if (key === "married_woman") {
+        if (has) return prev.filter((s) => s !== "married_woman");
+        return [...prev.filter((s) => s !== "single_mother"), "married_woman"];
+      }
+      if (has) return prev.filter((s) => s !== key);
+      return [...prev, key];
     });
   }
 
   useEffect(() => {
-    const qs = new URLSearchParams();
-    if (state) qs.set("state", state);
-    if (lga) qs.set("lga", lga);
+    if (!state) {
+      setLgas([]);
+      return;
+    }
+    fetch(`/api/geo/lgas?state=${encodeURIComponent(state)}`)
+      .then((r) => r.json())
+      .then((d) => setLgas(d.lgas ?? []))
+      .catch(() => setLgas([]));
+    setLga("");
+  }, [state]);
+
+  useEffect(() => {
+    if (!state || !lga) {
+      setCommunities([]);
+      return;
+    }
+    const qs = new URLSearchParams({ state, lga });
     fetch(`/api/communities?${qs}`)
       .then((r) => r.json())
       .then((d) => setCommunities(d.communities ?? []))
@@ -66,6 +93,10 @@ export default function SpecialStatusPage() {
       setError("Select at least one status");
       return;
     }
+    if (isSingleMother && isMarriedWoman) {
+      setError("Single mother cannot be combined with Married Women");
+      return;
+    }
     const form = e.currentTarget;
     setLoading(true);
     setError(null);
@@ -75,7 +106,10 @@ export default function SpecialStatusPage() {
       callUpNumber: pcm.callUpNumber,
       fullName: pcm.fullName,
       statuses,
-      husbandName: isSingleMother ? undefined : husbandName.trim() || undefined,
+      husbandName:
+        isSingleMother || !showHusband
+          ? undefined
+          : husbandName.trim() || undefined,
       address: String(fd.get("address") || "").trim(),
       residenceState: state,
       residenceLga: lga,
@@ -119,8 +153,8 @@ export default function SpecialStatusPage() {
       </Link>
       <h1 className="mt-4 text-2xl font-bold text-slate-900">Special Status</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Pregnant, nursing mother, or single mother — for posting and welfare. Search your
-        registered call-up first.
+        Married women, pregnant, nursing, or single mother — for posting and welfare.
+        Search your registered call-up first.
       </p>
 
       {error && (
@@ -147,7 +181,7 @@ export default function SpecialStatusPage() {
                 Status * (select all that apply)
               </legend>
               <p className="mt-1 text-xs text-slate-500">
-                Single mother cannot be combined with pregnant or nursing mother.
+                Single mother cannot be combined with Married Women.
               </p>
               <div className="mt-3 space-y-2">
                 {STATUS_OPTS.map((o) => (
@@ -163,7 +197,7 @@ export default function SpecialStatusPage() {
               </div>
             </fieldset>
 
-            {!isSingleMother && isMarriedPath && (
+            {!isSingleMother && showHusband && (
               <div>
                 <label className="text-xs font-semibold uppercase text-slate-500">
                   Husband’s full name
@@ -195,10 +229,7 @@ export default function SpecialStatusPage() {
                   required
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                   value={state}
-                  onChange={(e) => {
-                    setState(e.target.value);
-                    setLga("");
-                  }}
+                  onChange={(e) => setState(e.target.value)}
                 >
                   {NIGERIA_STATES.map((s) => (
                     <option key={s} value={s}>
@@ -209,50 +240,47 @@ export default function SpecialStatusPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase text-slate-500">LGA *</label>
-                {state === "Ekiti" ? (
-                  <select
-                    required
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    value={lga}
-                    onChange={(e) => setLga(e.target.value)}
-                  >
-                    <option value="">Select LGA…</option>
-                    {EKITI_LGAS.map((x) => (
-                      <option key={x} value={x}>
-                        {x}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    required
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    value={lga}
-                    onChange={(e) => setLga(lettersOnly(e.target.value))}
-                    placeholder="Enter LGA"
-                  />
-                )}
+                <select
+                  required
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  value={lga}
+                  onChange={(e) => setLga(e.target.value)}
+                >
+                  <option value="">Select LGA…</option>
+                  {lgas.map((x) => (
+                    <option key={x} value={x}>
+                      {x}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-semibold uppercase text-slate-500">
-                Community / town
-              </label>
-              <select
-                name="residenceCommunity"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                defaultValue=""
-              >
-                <option value="">Select community…</option>
-                {communities.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                    {c.lga ? ` (${c.lga})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {lga && communities.length > 0 && (
+              <div>
+                <label className="text-xs font-semibold uppercase text-slate-500">
+                  Community / town
+                </label>
+                <select
+                  name="residenceCommunity"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  defaultValue=""
+                >
+                  <option value="">Select community…</option>
+                  {communities.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {lga && communities.length === 0 && (
+              <p className="text-xs text-slate-500">
+                No communities configured for this LGA yet. Super Admin can add them under
+                Staff → Communities (tied to state + LGA).
+              </p>
+            )}
 
             <div>
               <label className="text-xs font-semibold uppercase text-slate-500">Phone</label>

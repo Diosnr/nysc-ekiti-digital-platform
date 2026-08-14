@@ -1,9 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { staffFetch, getAccessToken } from "@/lib/staff-api";
-import { phoneDigits, lettersOnly } from "@/lib/sanitize";
 
 type PcmHit = {
   id: string;
@@ -18,9 +17,19 @@ type PcmHit = {
   ziPhone?: string | null;
 };
 
+type Officer = {
+  id: string;
+  name: string;
+  phone: string;
+  lgaCode: string | null;
+  zoneCode: string | null;
+};
+
 export default function RegistrationCommitteePage() {
   const [q, setQ] = useState("");
   const [pcm, setPcm] = useState<PcmHit | null>(null);
+  const [lgis, setLgis] = useState<Officer[]>([]);
+  const [zis, setZis] = useState<Officer[]>([]);
   const [form, setForm] = useState({
     stateCode: "",
     ppaName: "",
@@ -33,6 +42,23 @@ export default function RegistrationCommitteePage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const [lRes, zRes] = await Promise.all([
+        staffFetch("/api/registration/officers?type=lgi"),
+        staffFetch("/api/registration/officers?type=zi"),
+      ]);
+      if (lRes.ok) {
+        const d = await lRes.json();
+        setLgis(d.officers ?? []);
+      }
+      if (zRes.ok) {
+        const d = await zRes.json();
+        setZis(d.officers ?? []);
+      }
+    })();
+  }, []);
 
   async function download(type: "skills" | "special-status") {
     setError(null);
@@ -81,7 +107,6 @@ export default function RegistrationCommitteePage() {
       const hit =
         list.find((p) => p.callUpNumber.toLowerCase() === q.trim().toLowerCase()) ??
         list[0];
-      // Load full record
       const det = await staffFetch(`/api/pcm/${hit.id}`);
       const full = await det.json();
       const p = (full.pcm ?? hit) as PcmHit;
@@ -100,6 +125,24 @@ export default function RegistrationCommitteePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function selectLgi(name: string) {
+    const o = lgis.find((x) => x.name === name);
+    setForm((f) => ({
+      ...f,
+      lgiName: name,
+      lgiPhone: o?.phone || f.lgiPhone,
+    }));
+  }
+
+  function selectZi(name: string) {
+    const o = zis.find((x) => x.name === name);
+    setForm((f) => ({
+      ...f,
+      ziName: name,
+      ziPhone: o?.phone || f.ziPhone,
+    }));
   }
 
   async function save(e: FormEvent) {
@@ -213,48 +256,89 @@ export default function RegistrationCommitteePage() {
               onChange={(e) => setForm({ ...form, ppaAddress: e.target.value })}
             />
           </div>
+
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">LGI name</label>
-            <input
+            <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={form.lgiName}
-              onChange={(e) =>
-                setForm({ ...form, lgiName: lettersOnly(e.target.value) })
-              }
-            />
+              onChange={(e) => selectLgi(e.target.value)}
+            >
+              <option value="">Select LGI…</option>
+              {lgis.map((o) => (
+                <option key={o.id} value={o.name}>
+                  {o.name}
+                  {o.lgaCode ? ` (${o.lgaCode})` : ""}
+                </option>
+              ))}
+            </select>
+            {lgis.length === 0 && (
+              <p className="mt-1 text-xs text-amber-700">
+                No LGI officers yet. Create users with the LGI role under Users.
+              </p>
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">LGI phone</label>
-            <input
-              inputMode="tel"
+            <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={form.lgiPhone}
-              onChange={(e) =>
-                setForm({ ...form, lgiPhone: phoneDigits(e.target.value) })
-              }
-            />
+              onChange={(e) => setForm({ ...form, lgiPhone: e.target.value })}
+            >
+              <option value="">Select phone…</option>
+              {[...new Set(lgis.map((o) => o.phone).filter(Boolean))].map((ph) => (
+                <option key={ph} value={ph}>
+                  {ph}
+                </option>
+              ))}
+              {form.lgiPhone &&
+                !lgis.some((o) => o.phone === form.lgiPhone) && (
+                  <option value={form.lgiPhone}>{form.lgiPhone}</option>
+                )}
+            </select>
           </div>
+
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">ZI name</label>
-            <input
+            <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={form.ziName}
-              onChange={(e) =>
-                setForm({ ...form, ziName: lettersOnly(e.target.value) })
-              }
-            />
+              onChange={(e) => selectZi(e.target.value)}
+            >
+              <option value="">Select ZI…</option>
+              {zis.map((o) => (
+                <option key={o.id} value={o.name}>
+                  {o.name}
+                  {o.zoneCode ? ` (${o.zoneCode})` : ""}
+                </option>
+              ))}
+            </select>
+            {zis.length === 0 && (
+              <p className="mt-1 text-xs text-amber-700">
+                No Zonal Inspectors yet. Create users with the Zonal Inspector role.
+              </p>
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">ZI phone</label>
-            <input
-              inputMode="tel"
+            <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={form.ziPhone}
-              onChange={(e) =>
-                setForm({ ...form, ziPhone: phoneDigits(e.target.value) })
-              }
-            />
+              onChange={(e) => setForm({ ...form, ziPhone: e.target.value })}
+            >
+              <option value="">Select phone…</option>
+              {[...new Set(zis.map((o) => o.phone).filter(Boolean))].map((ph) => (
+                <option key={ph} value={ph}>
+                  {ph}
+                </option>
+              ))}
+              {form.ziPhone &&
+                !zis.some((o) => o.phone === form.ziPhone) && (
+                  <option value={form.ziPhone}>{form.ziPhone}</option>
+                )}
+            </select>
           </div>
+
           <div className="sm:col-span-2">
             <button
               type="submit"

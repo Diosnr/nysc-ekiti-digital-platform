@@ -20,12 +20,9 @@ export async function POST(req: Request) {
     if (statuses.length === 0) return jsonError("Select at least one status");
 
     const hasSingle = statuses.includes("single_mother");
-    const hasMarriedPath =
-      statuses.includes("pregnant") || statuses.includes("nursing");
-    if (hasSingle && hasMarriedPath) {
-      return jsonError(
-        "Single mother cannot be combined with pregnant or nursing mother"
-      );
+    const hasMarried = statuses.includes("married_woman");
+    if (hasSingle && hasMarried) {
+      return jsonError("Single mother cannot be combined with Married Women");
     }
 
     const pcm = await prisma.pcm.findUnique({ where: { callUpNumber } });

@@ -21,7 +21,6 @@ export default function StaffDashboardPage() {
       if (!res.ok) return;
       const data = (await res.json()) as Me;
       setMe(data);
-      // Security-focused roles go straight to gate — no stub dashboard
       const roles = data.roles ?? [];
       const isSecurity =
         roles.includes("Security Officer") && !roles.includes("Super Admin");
@@ -50,6 +49,11 @@ export default function StaffDashboardPage() {
     );
   }
 
+  const perms = me.permissions;
+  const isSuper =
+    me.roles.some((r) => r.toLowerCase() === "super admin") ||
+    perms.includes("*");
+
   return (
     <StaffShell>
       <h1 className="text-2xl font-bold text-slate-900">
@@ -61,25 +65,18 @@ export default function StaffDashboardPage() {
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {me.permissions.includes("pcm:create") && (
-          <Link
-            href="/staff/pcm/intake"
-            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
-          >
-            <p className="font-semibold text-slate-900">PCM Intake</p>
-            <p className="mt-1 text-sm text-slate-600">Scan or register call-up letters</p>
-          </Link>
-        )}
-        {me.permissions.includes("pcm:read") && (
+        {(isSuper || perms.includes("pcm:read")) && (
           <Link
             href="/staff/pcm"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
           >
             <p className="font-semibold text-slate-900">PCM Registry</p>
-            <p className="mt-1 text-sm text-slate-600">Search verified records</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Search records · intake is on this page when allowed
+            </p>
           </Link>
         )}
-        {me.permissions.includes("security:checkin") && (
+        {(isSuper || perms.includes("security:checkin")) && (
           <Link
             href="/staff/security/checkin"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
@@ -88,7 +85,16 @@ export default function StaffDashboardPage() {
             <p className="mt-1 text-sm text-slate-600">Check-in and check-out</p>
           </Link>
         )}
-        {me.permissions.includes("user:read") && (
+        {(isSuper || perms.includes("registration:complete")) && (
+          <Link
+            href="/staff/registration"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+          >
+            <p className="font-semibold text-slate-900">Registration</p>
+            <p className="mt-1 text-sm text-slate-600">Exports and PPA / LGI / ZI</p>
+          </Link>
+        )}
+        {(isSuper || perms.includes("user:read")) && (
           <Link
             href="/staff/admin/users"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
@@ -97,13 +103,22 @@ export default function StaffDashboardPage() {
             <p className="mt-1 text-sm text-slate-600">Officers and activation</p>
           </Link>
         )}
-        {me.permissions.includes("camp:address:manage") && (
+        {(isSuper || perms.includes("camp:address:manage")) && (
           <Link
             href="/staff/admin/camp-addresses"
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
           >
             <p className="font-semibold text-slate-900">Camp addresses</p>
             <p className="mt-1 text-sm text-slate-600">Manage orientation camps</p>
+          </Link>
+        )}
+        {(isSuper || perms.includes("community:manage")) && (
+          <Link
+            href="/staff/admin/communities"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+          >
+            <p className="font-semibold text-slate-900">Communities</p>
+            <p className="mt-1 text-sm text-slate-600">Towns by state and LGA</p>
           </Link>
         )}
       </div>
