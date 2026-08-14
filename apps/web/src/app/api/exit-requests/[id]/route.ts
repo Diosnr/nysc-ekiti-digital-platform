@@ -10,7 +10,6 @@ import {
 
 type Params = { params: Promise<{ id: string }> };
 
-/** Light detail — no nested family/skills bulk; evidence only if requested */
 export async function GET(req: Request, { params }: Params) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
@@ -136,9 +135,21 @@ export async function PATCH(req: Request, { params }: Params) {
         rejectReason: note,
       },
     });
+
+    // Member stays in camp; no security checkout; clear any grant stamp
+    const pcm = await prisma.pcm.findUnique({ where: { id: row.pcmId } });
     await prisma.pcm.update({
       where: { id: row.pcmId },
-      data: { campExitGrantedAt: null, campExitGrantedById: null },
+      data: {
+        campExitGrantedAt: null,
+        campExitGrantedById: null,
+        exitGround: null,
+        exitReason: null,
+        status:
+          pcm?.status === "CAMP_EXIT_REQUESTED" || pcm?.status === "CHECKED_IN"
+            ? "CAMP_ACTIVE"
+            : pcm?.status ?? "CAMP_ACTIVE",
+      },
     });
 
     const meta = clientMeta(req);
@@ -150,7 +161,7 @@ export async function PATCH(req: Request, { params }: Params) {
       entityType: "CampExitRequest",
       entityId: id,
       pcmId: row.pcmId,
-      after: { rejectedByName: actorName, note },
+      after: { rejectedByName: actorName, note, stage: "REJECTED" },
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
