@@ -42,12 +42,10 @@ export function stageLabel(s: string): string {
   return map[s] ?? s;
 }
 
-/** First stage after platoon initiates */
 export function firstStageAfterInitiation(ground: ExitGround): ExitStage {
   return ground === "MEDICAL" ? "AWAITING_CLINIC" : "AWAITING_CAMP_DIRECTOR";
 }
 
-/** Which queue stage this role acts on */
 export function stageForRoles(roles: string[]): ExitStage | null {
   const r = roles.map((x) => x.toLowerCase());
   if (r.some((x) => x.includes("super admin"))) return null;
@@ -71,8 +69,7 @@ export function stageForRoles(roles: string[]): ExitStage | null {
   return null;
 }
 
-/** Only Platoon officers may start an exit request (UI + API). */
-export function canInitiateExit(roles: string[], _permissions: string[]): boolean {
+function isPlatoonRole(roles: string[]): boolean {
   const r = roles.map((x) => x.toLowerCase());
   return r.some(
     (x) =>
@@ -82,9 +79,42 @@ export function canInitiateExit(roles: string[], _permissions: string[]): boolea
   );
 }
 
+/** Platoon officers (or camp:exit:initiate) may start an exit request. */
+export function canInitiateExit(roles: string[], permissions: string[]): boolean {
+  if (permissions.includes("*") || permissions.includes("camp:exit:initiate")) {
+    return true;
+  }
+  return isPlatoonRole(roles);
+}
+
+/** Nav / page access to camp exit desk (initiate or approve). */
+export function canAccessExitDesk(roles: string[], permissions: string[]): boolean {
+  if (
+    permissions.includes("*") ||
+    permissions.includes("camp:exeat") ||
+    permissions.includes("camp:exit:initiate") ||
+    permissions.includes("camp:clinic")
+  ) {
+    return true;
+  }
+  const r = roles.map((x) => x.toLowerCase());
+  return (
+    isPlatoonRole(roles) ||
+    r.some(
+      (x) =>
+        x.includes("state coordinator") ||
+        x.includes("camp director") ||
+        x.includes("camp doctor") ||
+        x.includes("camp nurse") ||
+        x.includes("camp pharmacist") ||
+        x.includes("head of clinic")
+    )
+  );
+}
+
 /**
  * Who may Approve/Reject at the current open stage.
- * Never true for APPROVED / REJECTED / CANCELLED — even Super Admin.
+ * Never true for APPROVED / REJECTED / CANCELLED.
  */
 export function canActOnStage(
   stage: ExitStage,

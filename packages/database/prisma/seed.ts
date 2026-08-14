@@ -39,7 +39,8 @@ const PERMISSIONS: { key: string; description: string; module: string }[] = [
   { key: "platoon:attendance", description: "Record platoon attendance", module: "camp" },
   { key: "kit:issue", description: "Issue kits", module: "camp" },
   { key: "kit:view", description: "View kit status", module: "camp" },
-  { key: "camp:exeat", description: "Camp exeat / exit grant", module: "camp" },
+  { key: "camp:exeat", description: "Camp exit final approval / grant", module: "camp" },
+  { key: "camp:exit:initiate", description: "Initiate camp exit requests (platoon)", module: "camp" },
   { key: "camp:clinic", description: "Camp clinic workflows", module: "camp" },
   { key: "camp:export", description: "Download camp Excel exports", module: "camp" },
   { key: "file:read", description: "View electronic files", module: "files" },
@@ -94,6 +95,22 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "camp:exeat",
     "report:view",
   ],
+  "Camp Director": [
+    "dashboard:view",
+    "pcm:read",
+    "pcm:search",
+    "pcm:photo:view",
+    "camp:exeat",
+    "report:view",
+  ],
+  "Platoon Officer": [
+    "dashboard:view",
+    "pcm:read",
+    "pcm:search",
+    "pcm:photo:view",
+    "camp:exit:initiate",
+    "platoon:attendance",
+  ],
   "Head of Platoon Officers": [
     "dashboard:view",
     "platoon:manage",
@@ -101,6 +118,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "platoon:attendance",
     "pcm:read",
     "pcm:search",
+    "pcm:photo:view",
+    "camp:exit:initiate",
   ],
   "Head of Clinic": [
     "dashboard:view",
@@ -109,9 +128,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "pcm:search",
     "pcm:photo:view",
   ],
-  "Camp Doctor": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search"],
-  "Camp Nurse": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search"],
-  "Camp Pharmacist": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search"],
+  "Camp Doctor": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search", "pcm:photo:view"],
+  "Camp Nurse": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search", "pcm:photo:view"],
+  "Camp Pharmacist": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search", "pcm:photo:view"],
 };
 
 async function main() {
@@ -154,7 +173,7 @@ async function main() {
     { name: "Security Officer", description: "Camp security check-in/out and PCM intake at gate" },
     { name: "Registration Officer", description: "Camp registration committee" },
     { name: "Accommodation Officer", description: "Hostel and bed allocation" },
-    { name: "Platoon Officer", description: "Platoon management and attendance" },
+    { name: "Platoon Officer", description: "Platoon management, attendance, exit initiation" },
     { name: "Head of Platoon Officers", description: "Oversees all platoon officers" },
     { name: "Head of Clinic", description: "Camp clinic leadership" },
     { name: "Camp Doctor", description: "Camp medical doctor" },
