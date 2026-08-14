@@ -141,34 +141,33 @@ enum PcmLifecycleStatus {
 }
 
 model Pcm {
-  id                 String             @id @default(cuid())
-  callUpNumber       String             @unique
-  fullName           String
-  gender             String?
-  dateOfBirth        DateTime?
-  institution        String?
-  course             String?
-  phone              String?
-  email              String?
-  photographUrl      String?
-  deploymentState    String?
-  stateCode          String?
-  campAddress        String?
-  dateReporting      String?
-  batchYear          String?
-  stream             String?
-  originState        String?
-  lgaCode            String?
-  zoneCode           String?
-  status             PcmLifecycleStatus @default(VERIFIED)
-  /// When an admin (e.g. State Coordinator) grants early/authorised camp exit
-  campExitGrantedAt  DateTime?
+  id                  String             @id @default(cuid())
+  callUpNumber        String             @unique
+  fullName            String
+  gender              String?
+  dateOfBirth         DateTime?
+  institution         String?
+  course              String?
+  phone               String?
+  email               String?
+  photographUrl       String?
+  deploymentState     String?
+  stateCode           String?
+  campAddress         String?
+  dateReporting       String?
+  batchYear           String?
+  stream              String?
+  originState         String?
+  lgaCode             String?
+  zoneCode            String?
+  status              PcmLifecycleStatus @default(VERIFIED)
+  campExitGrantedAt   DateTime?
   campExitGrantedById String?
-  notes              String?
-  createdById        String?
-  createdBy          User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  notes               String?
+  createdById         String?
+  createdBy           User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   verifications VerificationRecord[]
 
@@ -211,4 +210,21 @@ model CampAddress {
   @@index([isActive])
   @@index([state])
   @@index([sortOrder])
+}
+
+/// Communities / towns for Ekiti Married Women and related forms (admin-managed)
+model Community {
+  id        String   @id @default(cuid())
+  name      String
+  lga       String?
+  state     String?  @default("Ekiti")
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([state])
+  @@index([lga])
+  @@index([name])
 }

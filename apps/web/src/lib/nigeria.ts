@@ -42,3 +42,23 @@ export const NIGERIA_STATES = [
 export type NigeriaState = (typeof NIGERIA_STATES)[number];
 
 export const GENDERS = ["Male", "Female"] as const;
+
+/** Ekiti LGAs (primary for married-women / posting forms) */
+export const EKITI_LGAS = [
+  "Ado Ekiti",
+  "Efon",
+  "Ekiti East",
+  "Ekiti South-West",
+  "Ekiti West",
+  "Emure",
+  "Gbonyin",
+  "Ido Osi",
+  "Ijero",
+  "Ikere",
+  "Ikole",
+  "Ilejemeje",
+  "Irepodun/Ifelodun",
+  "Ise/Orun",
+  "Moba",
+  "Oye",
+] as const;
