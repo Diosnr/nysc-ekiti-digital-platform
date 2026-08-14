@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clearTokens, getAccessToken, staffFetch } from "@/lib/staff-api";
 
 type Me = {
@@ -21,8 +21,12 @@ type NavItem = {
 const nav: NavItem[] = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
   { href: "/staff/security/checkin", label: "Security gate", perm: "security:checkin" },
-  { href: "/staff/pcm/intake", label: "PCM Intake", perm: "pcm:create" },
   { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
+  {
+    href: "/staff/registration",
+    label: "Registration",
+    perm: "registration:complete",
+  },
   {
     href: "/staff/admin/camp-addresses",
     label: "Camp addresses",
@@ -46,19 +50,30 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(true);
+  const loaded = useRef(false);
+
+  // Auth pages: no chrome
+  const bare =
+    pathname.startsWith("/staff/login") || pathname.startsWith("/staff/activate");
 
   useEffect(() => {
+    if (bare) return;
     if (!getAccessToken()) {
       router.replace("/staff/login");
       return;
     }
+    if (loaded.current && me) return;
     staffFetch("/api/auth/me")
       .then(async (res) => {
-        if (!res.ok) return;
+        if (!res.ok) {
+          router.replace("/staff/login");
+          return;
+        }
         setMe(await res.json());
+        loaded.current = true;
       })
       .catch(() => router.replace("/staff/login"));
-  }, [router]);
+  }, [router, bare, me]);
 
   function logout() {
     const refresh = localStorage.getItem("nysc_refresh_token");
@@ -67,8 +82,14 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
       body: JSON.stringify({ refreshToken: refresh }),
     }).finally(() => {
       clearTokens();
+      loaded.current = false;
+      setMe(null);
       router.replace("/staff/login");
     });
+  }
+
+  if (bare) {
+    return <>{children}</>;
   }
 
   const perms = me?.permissions ?? [];
@@ -76,20 +97,17 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   const isSecurity = roles.includes("Security Officer");
   const isSuper =
     roles.some((r) => r.toLowerCase() === "super admin") || perms.includes("*");
+  const isRegistration =
+    roles.includes("Registration Officer") || perms.includes("registration:complete");
 
   const can = (p: string | null) => {
     if (!p) return true;
     if (isSuper || perms.includes("*") || perms.includes(p)) return true;
     if (p === "pcm:create" && perms.includes("pcm:verify")) return true;
     if (p === "pcm:read" && perms.includes("pcm:search")) return true;
+    if (p === "registration:complete" && isRegistration) return true;
     if (isSecurity && !isSuper) {
-      return [
-        "security:checkin",
-        "pcm:read",
-        "pcm:search",
-        "pcm:create",
-        "pcm:verify",
-      ].includes(p);
+      return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
     }
     return false;
   };
@@ -97,9 +115,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   const visible = nav.filter((n) => {
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
-      return ["/staff/security/checkin", "/staff/pcm/intake", "/staff/pcm"].includes(
-        n.href
-      );
+      return ["/staff/security/checkin", "/staff/pcm"].includes(n.href);
     }
     return true;
   });
@@ -110,11 +126,12 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
   function NavLink({ item }: { item: NavItem }) {
     const active =
       item.href === "/staff/pcm"
-        ? pathname === "/staff/pcm"
+        ? pathname === "/staff/pcm" || pathname.startsWith("/staff/pcm/")
         : pathname.startsWith(item.href);
     return (
       <Link
         href={item.href}
+        prefetch
         onClick={() => setMobileOpen(false)}
         className={`block rounded-lg px-3 py-2 text-sm font-medium transition ${
           active
@@ -186,7 +203,6 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-100">
-      {/* Mobile top bar */}
       <div className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-nysc-green text-xs font-bold text-white">
@@ -230,4 +246,9 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   );
+}
+
+/** No-op wrapper so existing pages that still import StaffShell do not double-chrome. */
+export function StaffPage({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }

@@ -141,33 +141,44 @@ enum PcmLifecycleStatus {
 }
 
 model Pcm {
-  id                  String             @id @default(cuid())
-  callUpNumber        String             @unique
-  fullName            String
-  gender              String?
-  dateOfBirth         DateTime?
-  institution         String?
-  course              String?
-  phone               String?
-  email               String?
-  photographUrl       String?
-  deploymentState     String?
-  stateCode           String?
-  campAddress         String?
-  dateReporting       String?
-  batchYear           String?
-  stream              String?
-  originState         String?
-  lgaCode             String?
-  zoneCode            String?
-  status              PcmLifecycleStatus @default(VERIFIED)
-  campExitGrantedAt   DateTime?
-  campExitGrantedById String?
-  notes               String?
-  createdById         String?
-  createdBy           User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  id                    String             @id @default(cuid())
+  callUpNumber          String             @unique
+  fullName              String
+  gender                String?
+  dateOfBirth           DateTime?
+  institution           String?
+  course                String?
+  phone                 String?
+  email                 String?
+  photographUrl         String?
+  deploymentState       String?
+  stateCode             String?
+  campAddress           String?
+  dateReporting         String?
+  batchYear             String?
+  stream                String?
+  originState           String?
+  lgaCode               String?
+  zoneCode              String?
+  status                PcmLifecycleStatus @default(VERIFIED)
+  campExitGrantedAt     DateTime?
+  campExitGrantedById   String?
+  /// Security checkout capture
+  exitReason            String?
+  exitDestinationState  String?
+  checkedOutAt          DateTime?
+  /// Registration committee extras (not from security intake)
+  ppaName               String?
+  ppaAddress            String?
+  lgiName               String?
+  lgiPhone              String?
+  ziName                String?
+  ziPhone               String?
+  notes                 String?
+  createdById           String?
+  createdBy             User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   verifications   VerificationRecord[]
   familyStatuses  PcmFamilyStatus[]
@@ -182,6 +193,7 @@ model Pcm {
   @@index([status])
   @@index([batchYear])
   @@index([campExitGrantedAt])
+  @@index([checkedOutAt])
 }
 
 model VerificationRecord {
@@ -198,17 +210,14 @@ model VerificationRecord {
   @@index([verifiedAt])
 }
 
-/// Special status form submissions (pregnant / nursing / single mother)
 model PcmFamilyStatus {
   id           String   @id @default(cuid())
   pcmId        String?
   pcm          Pcm?     @relation(fields: [pcmId], references: [id], onDelete: SetNull)
   callUpNumber String
   fullName     String
-  /// JSON array e.g. ["pregnant","nursing"] or ["single_mother"]
   statusesJson String
   husbandName  String?
-  /// Address (husband's address when married/nursing/pregnant; plain address for single mother)
   address      String
   state        String?
   lga          String?
