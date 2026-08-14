@@ -16,6 +16,16 @@ export type ExitStage =
   | "REJECTED"
   | "CANCELLED";
 
+export const TERMINAL_EXIT_STAGES: ExitStage[] = [
+  "APPROVED",
+  "REJECTED",
+  "CANCELLED",
+];
+
+export function isTerminalExitStage(stage: string): boolean {
+  return TERMINAL_EXIT_STAGES.includes(stage as ExitStage);
+}
+
 export function groundLabel(g: string): string {
   return EXIT_GROUNDS.find((x) => x.value === g)?.label ?? g;
 }
@@ -40,7 +50,7 @@ export function firstStageAfterInitiation(ground: ExitGround): ExitStage {
 /** Which queue stage this role acts on */
 export function stageForRoles(roles: string[]): ExitStage | null {
   const r = roles.map((x) => x.toLowerCase());
-  if (r.some((x) => x.includes("super admin"))) return null; // sees all
+  if (r.some((x) => x.includes("super admin"))) return null;
   if (
     r.some(
       (x) =>
@@ -72,14 +82,21 @@ export function canInitiateExit(roles: string[], _permissions: string[]): boolea
   );
 }
 
+/**
+ * Who may Approve/Reject at the current open stage.
+ * Never true for APPROVED / REJECTED / CANCELLED — even Super Admin.
+ */
 export function canActOnStage(
   stage: ExitStage,
   roles: string[],
   permissions: string[]
 ): boolean {
+  if (isTerminalExitStage(stage)) return false;
+
   if (permissions.includes("*")) return true;
   const r = roles.map((x) => x.toLowerCase());
   if (r.some((x) => x.includes("super admin"))) return true;
+
   if (stage === "AWAITING_CLINIC") {
     return r.some(
       (x) =>
@@ -103,7 +120,7 @@ export function canActOnStage(
 
 export function nextStageAfterApprove(
   current: ExitStage,
-  ground: ExitGround
+  _ground: ExitGround
 ): ExitStage {
   if (current === "AWAITING_CLINIC") return "AWAITING_CAMP_DIRECTOR";
   if (current === "AWAITING_CAMP_DIRECTOR") return "AWAITING_STATE_COORDINATOR";
