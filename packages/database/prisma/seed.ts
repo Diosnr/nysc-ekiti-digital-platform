@@ -94,6 +94,24 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "camp:exeat",
     "report:view",
   ],
+  "Head of Platoon Officers": [
+    "dashboard:view",
+    "platoon:manage",
+    "platoon:assign",
+    "platoon:attendance",
+    "pcm:read",
+    "pcm:search",
+  ],
+  "Head of Clinic": [
+    "dashboard:view",
+    "camp:clinic",
+    "pcm:read",
+    "pcm:search",
+    "pcm:photo:view",
+  ],
+  "Camp Doctor": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search"],
+  "Camp Nurse": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search"],
+  "Camp Pharmacist": ["dashboard:view", "camp:clinic", "pcm:read", "pcm:search"],
 };
 
 async function main() {
@@ -137,6 +155,11 @@ async function main() {
     { name: "Registration Officer", description: "Camp registration committee" },
     { name: "Accommodation Officer", description: "Hostel and bed allocation" },
     { name: "Platoon Officer", description: "Platoon management and attendance" },
+    { name: "Head of Platoon Officers", description: "Oversees all platoon officers" },
+    { name: "Head of Clinic", description: "Camp clinic leadership" },
+    { name: "Camp Doctor", description: "Camp medical doctor" },
+    { name: "Camp Nurse", description: "Camp nursing staff" },
+    { name: "Camp Pharmacist", description: "Camp pharmacy" },
     { name: "LGI", description: "Local Government Inspector — LGA-scoped corps data and files" },
     { name: "Zonal Inspector", description: "Zone-scoped corps data and file routing" },
     { name: "Head CIM", description: "Head of Corps Inspection / related approvals" },
