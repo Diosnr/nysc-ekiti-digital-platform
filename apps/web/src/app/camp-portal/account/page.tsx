@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { CallUpLookup } from "@/components/CallUpLookup";
+import { digitsOnly } from "@/lib/sanitize";
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -17,6 +18,7 @@ export default function AccountNinPage() {
   const [pcm, setPcm] = useState<{ callUpNumber: string; fullName: string } | null>(
     null
   );
+  const [nin, setNin] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,12 +29,11 @@ export default function AccountNinPage() {
       setError("Search and select a registered call-up number first");
       return;
     }
+    const form = e.currentTarget;
     setLoading(true);
     setError(null);
     setMsg(null);
-    const form = e.currentTarget;
     const fd = new FormData(form);
-    const nin = String(fd.get("nin") || "").trim();
     const front = (fd.get("ninFront") as File | null) ?? null;
     const back = (fd.get("ninBack") as File | null) ?? null;
 
@@ -62,11 +63,13 @@ export default function AccountNinPage() {
         setError(json.error ?? "Submission failed");
         return;
       }
+      setError(null);
       setMsg("NIN images submitted and linked to your call-up number.");
-      form.reset();
+      setNin("");
       setPcm(null);
     } catch {
-      setError("Network error");
+      setError("Network error — please try again");
+      setMsg(null);
     } finally {
       setLoading(false);
     }
@@ -106,10 +109,12 @@ export default function AccountNinPage() {
                 NIN (11 digits)
               </label>
               <input
-                name="nin"
-                pattern="[0-9]{11}"
+                inputMode="numeric"
+                maxLength={11}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 placeholder="Optional if on the card image"
+                value={nin}
+                onChange={(e) => setNin(digitsOnly(e.target.value).slice(0, 11))}
               />
             </div>
             <div>

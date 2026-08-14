@@ -38,10 +38,8 @@ export default function SpecialStatusPage() {
     setStatuses((prev) => {
       const has = prev.includes(key);
       if (key === "single_mother") {
-        // Exclusive with pregnant/nursing
         return has ? [] : ["single_mother"];
       }
-      // Selecting pregnant/nursing clears single_mother
       const withoutSingle = prev.filter((s) => s !== "single_mother");
       if (has) return withoutSingle.filter((s) => s !== key);
       return [...withoutSingle, key];
@@ -68,10 +66,11 @@ export default function SpecialStatusPage() {
       setError("Select at least one status");
       return;
     }
+    const form = e.currentTarget;
     setLoading(true);
     setError(null);
     setMsg(null);
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData(form);
     const body = {
       callUpNumber: pcm.callUpNumber,
       fullName: pcm.fullName,
@@ -99,14 +98,15 @@ export default function SpecialStatusPage() {
         setError(json.error ?? "Submission failed");
         return;
       }
+      setError(null);
       setMsg("Submitted successfully.");
-      e.currentTarget.reset();
       setStatuses([]);
       setHusbandName("");
       setPhone("");
       setPcm(null);
     } catch {
-      setError("Network error");
+      setError("Network error — please try again");
+      setMsg(null);
     } finally {
       setLoading(false);
     }

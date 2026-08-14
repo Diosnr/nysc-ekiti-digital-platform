@@ -32,10 +32,12 @@ export default function SkillsPage() {
       setError("Search and select a registered call-up number first");
       return;
     }
+    // Capture form before any await / state updates (React can clear currentTarget)
+    const form = e.currentTarget;
     setLoading(true);
     setError(null);
     setMsg(null);
-    const fd = new FormData(e.currentTarget);
+    const fd = new FormData(form);
     const body = {
       callUpNumber: pcm.callUpNumber,
       fullName: pcm.fullName,
@@ -54,11 +56,13 @@ export default function SkillsPage() {
         setError(json.error ?? "Submission failed");
         return;
       }
+      // Success only — do not call form.reset() after setPcm(null) unmounts the form
+      setError(null);
       setMsg("Skills submitted successfully.");
-      e.currentTarget.reset();
       setPcm(null);
     } catch {
-      setError("Network error");
+      setError("Network error — please try again");
+      setMsg(null);
     } finally {
       setLoading(false);
     }
