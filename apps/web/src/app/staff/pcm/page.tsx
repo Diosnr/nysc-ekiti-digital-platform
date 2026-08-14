@@ -55,6 +55,7 @@ export default function PcmRegistryPage() {
   const [detail, setDetail] = useState<Pcm | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
+  const [canIntake, setCanIntake] = useState(false);
 
   async function load(search?: string) {
     setError(null);
@@ -78,10 +79,18 @@ export default function PcmRegistryPage() {
     staffFetch("/api/auth/me").then(async (res) => {
       if (!res.ok) return;
       const me = await res.json();
-      setIsSuper(
-        (me.roles ?? []).some(
-          (r: string) => r.toLowerCase() === "super admin"
-        ) || (me.permissions ?? []).includes("*")
+      const roles: string[] = me.roles ?? [];
+      const perms: string[] = me.permissions ?? [];
+      const superA =
+        roles.some((r) => r.toLowerCase() === "super admin") ||
+        perms.includes("*");
+      setIsSuper(superA);
+      setCanIntake(
+        superA ||
+          perms.includes("pcm:create") ||
+          perms.includes("pcm:verify") ||
+          roles.includes("Security Officer") ||
+          roles.includes("Registration Officer")
       );
     });
   }, []);
@@ -122,12 +131,14 @@ export default function PcmRegistryPage() {
             Click a name to open details in the side panel.
           </p>
         </div>
-        <Link
-          href="/staff/pcm/intake"
-          className="rounded-md bg-nysc-green px-3 py-2 text-sm font-semibold text-white"
-        >
-          New intake
-        </Link>
+        {canIntake && (
+          <Link
+            href="/staff/pcm/intake"
+            className="rounded-md bg-nysc-green px-3 py-2 text-sm font-semibold text-white"
+          >
+            New intake
+          </Link>
+        )}
       </div>
 
       {error && (
@@ -172,7 +183,8 @@ export default function PcmRegistryPage() {
                 {pcms.length === 0 && (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                      No records. Use PCM Intake to register.
+                      No records.
+                      {canIntake ? " Use New intake to register." : ""}
                     </td>
                   </tr>
                 )}
@@ -204,7 +216,6 @@ export default function PcmRegistryPage() {
         )}
       </div>
 
-      {/* Right slide-over */}
       {selectedId && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <button
@@ -262,9 +273,14 @@ export default function PcmRegistryPage() {
                           ["Batch", detail.batchYear],
                         ] as [string, string | null | undefined][]
                       ).map(([k, v]) => (
-                        <div key={k} className="flex justify-between gap-2 border-b border-slate-50 py-1">
+                        <div
+                          key={k}
+                          className="flex justify-between gap-2 border-b border-slate-50 py-1"
+                        >
                           <dt className="text-slate-500">{k}</dt>
-                          <dd className="text-right font-medium text-slate-900">{v || "—"}</dd>
+                          <dd className="text-right font-medium text-slate-900">
+                            {v || "—"}
+                          </dd>
                         </div>
                       ))}
                     </dl>
@@ -317,7 +333,8 @@ export default function PcmRegistryPage() {
                         key={s.id}
                         className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
                       >
-                        {[s.skill1, s.skill2, s.skill3].filter(Boolean).join(" · ") || "—"}
+                        {[s.skill1, s.skill2, s.skill3].filter(Boolean).join(" · ") ||
+                          "—"}
                       </div>
                     ))}
                   </section>
