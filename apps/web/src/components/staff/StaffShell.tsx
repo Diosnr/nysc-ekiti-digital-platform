@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { clearTokens, getAccessToken, staffFetch } from "@/lib/staff-api";
+import { canAccessExitDesk } from "@/lib/exit-workflow";
 
 type Me = {
   user: { name: string | null; email: string };
@@ -22,6 +23,8 @@ type NavItem = {
   label: string;
   perm: string | null;
   group?: "create";
+  /** special visibility handled in filter */
+  special?: "exit";
 };
 
 const ShellCtx = createContext(false);
@@ -37,8 +40,9 @@ const nav: NavItem[] = [
   },
   {
     href: "/staff/exit",
-    label: "Grant exit",
+    label: "Camp exit",
     perm: "camp:exeat",
+    special: "exit",
   },
   {
     href: "/staff/admin/camp-addresses",
@@ -121,17 +125,14 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const isRegistration =
     roles.includes("Registration Officer") ||
     perms.includes("registration:complete");
-  const isExitApprover =
-    roles.includes("State Coordinator") ||
-    roles.includes("Camp Director") ||
-    perms.includes("camp:exeat");
+  const exitDesk = canAccessExitDesk(roles, perms);
 
   const can = (p: string | null) => {
     if (!p) return true;
     if (isSuper || perms.includes("*") || perms.includes(p)) return true;
     if (p === "pcm:read" && perms.includes("pcm:search")) return true;
     if (p === "registration:complete" && isRegistration) return true;
-    if (p === "camp:exeat" && isExitApprover) return true;
+    if (p === "camp:exeat" && exitDesk) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
     }
@@ -139,6 +140,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   };
 
   const visible = nav.filter((n) => {
+    if (n.special === "exit") return exitDesk;
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
       return ["/staff/security/checkin", "/staff/pcm"].includes(n.href);

@@ -4,6 +4,7 @@ import { writeAudit } from "@/lib/audit";
 import {
   firstStageAfterInitiation,
   canInitiateExit,
+  canAccessExitDesk,
   type ExitGround,
 } from "@/lib/exit-workflow";
 
@@ -11,9 +12,14 @@ export async function GET(req: Request) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
 
+  if (!canAccessExitDesk(auth.payload.roles, auth.payload.permissions)) {
+    return jsonError("Forbidden", 403);
+  }
+
   const url = new URL(req.url);
   const stage = url.searchParams.get("stage");
   const bucket = url.searchParams.get("bucket");
+  const mine = url.searchParams.get("mine") === "1";
 
   const where: Record<string, unknown> = {};
   if (stage) where.stage = stage;
@@ -28,8 +34,10 @@ export async function GET(req: Request) {
       ],
     };
   }
+  if (mine) {
+    where.initiatedById = auth.payload.sub;
+  }
 
-  // Light list — never ship base64 evidence photos in the list payload
   const rows = await prisma.campExitRequest.findMany({
     where,
     orderBy: { initiatedAt: "desc" },
