@@ -192,7 +192,9 @@ export default function SecurityGatePage() {
               {pcm.status}
             </p>
             {pcm.campExitGrantedAt && (
-              <p className="mt-2 text-xs font-medium text-green-700">Exit granted by admin</p>
+              <p className="mt-2 text-xs font-medium text-green-700">
+                Exit granted by State Coordinator
+              </p>
             )}
             {pcm.checkedOutAt && (
               <p className="mt-2 text-xs text-slate-600">
