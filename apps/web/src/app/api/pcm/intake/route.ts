@@ -104,21 +104,22 @@ export async function POST(req: Request) {
     }
 
     let photographUrl: string | null = data.photographUrl
-      ? String(data.photographUrl)
+      ? String(data.photographUrl).trim()
       : null;
 
     if (!photographUrl) {
       return jsonError("Photo is required for intake", 400);
     }
 
-    if (photographUrl.startsWith("data:image")) {
+    // Always persist on Cloudinary (data URI or remote NYSC URL)
+    if (!/res\.cloudinary\.com/i.test(photographUrl)) {
       const uploaded = await uploadDataUriToCloudinary(
         photographUrl,
         callUpNumber
       );
       if (!uploaded) {
         return jsonError(
-          "Photo upload failed. Check Cloudinary env vars (CLOUDINARY_CLOUD_NAME, API_KEY, API_SECRET) on Vercel, then redeploy.",
+          "Photo upload failed. Check Cloudinary env vars (CLOUDINARY_CLOUD_NAME, API_KEY, API_SECRET) on Vercel.",
           400
         );
       }
