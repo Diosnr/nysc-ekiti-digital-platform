@@ -25,6 +25,11 @@ const nav = [
     label: "Camp addresses",
     perm: "camp:address:manage",
   },
+  {
+    href: "/staff/admin/communities",
+    label: "Communities",
+    perm: "community:manage",
+  },
   { href: "/staff/admin/users", label: "Users", perm: "user:read" },
   { href: "/staff/admin/roles", label: "Roles", perm: "role:read" },
   { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read" },
@@ -70,7 +75,9 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
     if (perms.includes("*") || perms.includes(p)) return true;
     if (p === "pcm:create" && perms.includes("pcm:verify")) return true;
     if (p === "pcm:read" && perms.includes("pcm:search")) return true;
-    // Security Officer baseline tools (role-name fallback until seed perms catch up)
+    if (isSuper && (p === "community:manage" || p === "camp:address:manage")) {
+      return true;
+    }
     if (isSecurity && !isSuper) {
       if (
         p === "security:checkin" ||
@@ -85,7 +92,6 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
     return false;
   };
 
-  // Security-focused nav: gate + intake (+ registry for lookup). No admin stubs.
   const links = nav.filter((n) => {
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
@@ -95,7 +101,6 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
         "/staff/pcm",
       ].includes(n.href);
     }
-    // Hide empty dashboard link for pure security
     if (n.href === "/staff/dashboard" && isSecurity && !isSuper) return false;
     return true;
   });
@@ -149,7 +154,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
 
       {showNav && (
         <nav className="border-b border-slate-200 bg-white shadow-sm">
-          <div className="mx-auto hidden max-w-6xl gap-1 px-4 sm:flex sm:px-6">
+          <div className="mx-auto hidden max-w-6xl gap-1 overflow-x-auto px-4 sm:flex sm:px-6">
             {links.map((n) => {
               const active =
                 n.href === "/staff/pcm"
@@ -160,7 +165,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={n.href}
                   href={n.href}
-                  className={`border-b-2 px-4 py-3 text-sm font-semibold transition ${
+                  className={`whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition ${
                     active
                       ? "border-nysc-green text-nysc-green"
                       : "border-transparent text-slate-600 hover:text-slate-900"
