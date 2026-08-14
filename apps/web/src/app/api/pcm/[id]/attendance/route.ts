@@ -1,20 +1,20 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requirePermission, jsonOk, jsonError, clientMeta } from "@/lib/api";
+import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(req: Request, { params }: Params) {
-  const auth = await requireAuth(req);
+  const auth = await requireAuth(req, "platoon:attendance");
   if (auth instanceof Response) return auth;
-  const denied = requirePermission(auth.payload, "platoon:attendance");
-  if (denied) return denied;
 
   const { id } = await params;
   const body = await req.json();
   const present = body.present !== false;
   const note = body.note ? String(body.note).trim() : null;
-  const dateStr = body.date ? String(body.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const dateStr = body.date
+    ? String(body.date).slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
   const date = new Date(dateStr + "T12:00:00.000Z");
 
   const pcm = await prisma.pcm.findUnique({ where: { id } });

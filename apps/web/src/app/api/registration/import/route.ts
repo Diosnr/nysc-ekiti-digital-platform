@@ -1,20 +1,11 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requirePermission, jsonOk, jsonError, clientMeta } from "@/lib/api";
+import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { mapRowFields } from "@/lib/csv";
 
-/**
- * Chunked bulk upsert for Registration Committee.
- * Body: { jobId?, fileName?, totalRows?, rows: Record[], done?: boolean }
- * Client sends batches of ~200–500 rows. Key = callUpNumber.
- * Existing: fill empty identity fields; always apply registration fields when present.
- * Missing: create VERIFIED record (fullName required).
- */
 export async function POST(req: Request) {
-  const auth = await requireAuth(req);
+  const auth = await requireAuth(req, "registration:complete");
   if (auth instanceof Response) return auth;
-  const denied = requirePermission(auth.payload, "registration:complete");
-  if (denied) return denied;
 
   const body = await req.json();
   const rawRows: Record<string, string>[] = Array.isArray(body.rows) ? body.rows : [];
@@ -62,7 +53,6 @@ export async function POST(req: Request) {
 
       if (existing) {
         const data: Record<string, string | null | undefined> = {};
-        // Fill blanks only for identity
         const fill = (key: string, val: string) => {
           if (!val) return;
           const cur = (existing as Record<string, unknown>)[key];
@@ -79,7 +69,6 @@ export async function POST(req: Request) {
         fill("lgaCode", mapped.lgaCode);
         fill("zoneCode", mapped.zoneCode);
 
-        // Registration fields: overwrite when provided
         if (mapped.stateCode) data.stateCode = mapped.stateCode;
         if (mapped.ppaName) data.ppaName = mapped.ppaName;
         if (mapped.ppaAddress) data.ppaAddress = mapped.ppaAddress;
@@ -145,9 +134,7 @@ export async function POST(req: Request) {
       updatedCount: { increment: updated },
       skippedCount: { increment: skipped },
       errorCount: { increment: errors.length },
-      errorSample: errors.length
-        ? JSON.stringify(errors.slice(0, 20))
-        : undefined,
+      errorSample: errors.length ? JSON.stringify(errors.slice(0, 20)) : undefined,
       status: done ? "COMPLETED" : "RUNNING",
       totalRows: body.totalRows ? Number(body.totalRows) : undefined,
     },

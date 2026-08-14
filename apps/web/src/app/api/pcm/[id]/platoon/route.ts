@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requirePermission, jsonOk, jsonError, clientMeta } from "@/lib/api";
+import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
@@ -7,15 +7,14 @@ type Params = { params: Promise<{ id: string }> };
 export async function PATCH(req: Request, { params }: Params) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
-  const denied = requirePermission(auth.payload, "platoon:assign");
-  if (denied) {
-    // allow platoon officers with attendance-only if they have platoon:manage too
-    const alt = requirePermission(auth.payload, "platoon:manage");
-    if (alt && !auth.payload.permissions.includes("*")) {
-      const roles = auth.payload.roles.map((r) => r.toLowerCase());
-      if (!roles.some((r) => r.includes("platoon"))) return denied;
-    }
-  }
+
+  const roles = auth.payload.roles.map((r) => r.toLowerCase());
+  const can =
+    auth.payload.permissions.includes("*") ||
+    auth.payload.permissions.includes("platoon:assign") ||
+    auth.payload.permissions.includes("platoon:manage") ||
+    roles.some((r) => r.includes("platoon"));
+  if (!can) return jsonError("Forbidden", 403);
 
   const { id } = await params;
   const body = await req.json();

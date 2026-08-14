@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, requirePermission, jsonOk, jsonError, clientMeta } from "@/lib/api";
+import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
@@ -14,10 +14,16 @@ const DEFAULT_KIT = [
 ];
 
 export async function POST(req: Request, { params }: Params) {
-  const auth = await requireAuth(req);
+  const auth = await requireAuth(req, "kit:issue");
   if (auth instanceof Response) return auth;
-  const denied = requirePermission(auth.payload, "kit:issue");
-  if (denied) return denied;
+
+  // Platoon roles may issue kit without explicit kit:issue if they have platoon perms
+  const roles = auth.payload.roles.map((r) => r.toLowerCase());
+  const can =
+    auth.payload.permissions.includes("*") ||
+    auth.payload.permissions.includes("kit:issue") ||
+    roles.some((r) => r.includes("platoon"));
+  if (!can) return jsonError("Forbidden", 403);
 
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
