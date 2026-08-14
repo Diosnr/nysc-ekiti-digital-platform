@@ -140,14 +140,12 @@ enum PcmLifecycleStatus {
   COMPLETED
 }
 
-// Grounds for leaving camp early
 enum CampExitGround {
   MARITAL
   MEDICAL
   TERRORISM
 }
 
-// Workflow stage awaiting the next approver
 enum CampExitStage {
   AWAITING_CLINIC
   AWAITING_CAMP_DIRECTOR
@@ -180,7 +178,6 @@ model Pcm {
   status                PcmLifecycleStatus @default(VERIFIED)
   campExitGrantedAt     DateTime?
   campExitGrantedById   String?
-  // Latest exit ground stamped on profile
   exitGround            String?
   exitReason            String?
   exitDestinationState  String?
@@ -191,6 +188,14 @@ model Pcm {
   lgiPhone              String?
   ziName                String?
   ziPhone               String?
+  // Platoon (status action, not file dump)
+  platoonCode           String?
+  platoonAssignedAt     DateTime?
+  platoonAssignedByName String?
+  // Kit issue (status action)
+  kitIssuedAt           DateTime?
+  kitIssuedByName       String?
+  kitItemsJson          String?
   notes                 String?
   createdById           String?
   createdBy             User?              @relation("PcmCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -202,6 +207,7 @@ model Pcm {
   skillProfiles   PcmSkillProfile[]
   ninRecords      PcmNinRecord[]
   exitRequests    CampExitRequest[]
+  attendance      PlatoonAttendance[]
 
   @@index([fullName])
   @@index([stateCode])
@@ -212,10 +218,26 @@ model Pcm {
   @@index([batchYear])
   @@index([campExitGrantedAt])
   @@index([checkedOutAt])
+  @@index([platoonCode])
+  @@index([kitIssuedAt])
 }
 
-// Camp exit: Platoon initiates -> Clinic if MEDICAL -> Camp Director -> State Coordinator.
-// Approvals stamp the person's real name, not only role.
+model PlatoonAttendance {
+  id           String   @id @default(cuid())
+  pcmId        String
+  pcm          Pcm      @relation(fields: [pcmId], references: [id], onDelete: Cascade)
+  date         DateTime @db.Date
+  present      Boolean  @default(true)
+  recordedById String?
+  recordedByName String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@unique([pcmId, date])
+  @@index([date])
+  @@index([pcmId])
+}
+
 model CampExitRequest {
   id              String         @id @default(cuid())
   pcmId           String
@@ -224,21 +246,17 @@ model CampExitRequest {
   reasonDetail    String?
   photoUrlsJson   String?
   stage           CampExitStage
-  // Initiator (platoon officer)
   initiatedById   String
   initiatedByName String
   initiatedAt     DateTime       @default(now())
-  // Clinic (medical path only)
   clinicById      String?
   clinicByName    String?
   clinicAt        DateTime?
   clinicNote      String?
-  // Camp Director
   directorById    String?
   directorByName  String?
   directorAt      DateTime?
   directorNote    String?
-  // State Coordinator (final)
   coordinatorById   String?
   coordinatorByName String?
   coordinatorAt     DateTime?
@@ -350,4 +368,25 @@ model Community {
   @@index([state])
   @@index([lga])
   @@index([name])
+}
+
+// Tracks bulk registration CSV imports (chunked client → server)
+model RegistrationImportJob {
+  id           String   @id @default(cuid())
+  startedById  String?
+  startedByName String?
+  fileName     String?
+  totalRows    Int      @default(0)
+  processed    Int      @default(0)
+  createdCount Int      @default(0)
+  updatedCount Int      @default(0)
+  skippedCount Int      @default(0)
+  errorCount   Int      @default(0)
+  status       String   @default("RUNNING")
+  errorSample  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
