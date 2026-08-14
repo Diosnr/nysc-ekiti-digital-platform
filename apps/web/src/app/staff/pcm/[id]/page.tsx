@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { PcmPhoto } from "@/components/staff/PcmPhoto";
@@ -25,9 +25,24 @@ type Pcm = {
 
 export default function PcmDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const id = String(params.id ?? "");
   const [pcm, setPcm] = useState<Pcm | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSuper, setIsSuper] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    staffFetch("/api/auth/me").then(async (res) => {
+      if (!res.ok) return;
+      const me = await res.json();
+      setIsSuper(
+        (me.roles ?? []).includes("Super Admin") ||
+          (me.permissions ?? []).includes("*") ||
+          (me.permissions ?? []).includes("pcm:delete")
+      );
+    });
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -41,11 +56,49 @@ export default function PcmDetailPage() {
     });
   }, [id]);
 
+  async function onDelete() {
+    if (!pcm) return;
+    if (
+      !confirm(
+        `Delete PCM permanently?\n\n${pcm.fullName}\n${pcm.callUpNumber}\n\nThis cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await staffFetch(`/api/pcm/${pcm.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Delete failed");
+        return;
+      }
+      router.replace("/staff/pcm");
+    } catch {
+      setError("Network error");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <StaffShell>
-      <Link href="/staff/pcm" className="text-sm font-medium text-nysc-green hover:underline">
-        ← PCM Registry
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/staff/pcm" className="text-sm font-medium text-nysc-green hover:underline">
+          ← PCM Registry
+        </Link>
+        {isSuper && pcm && (
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={() => void onDelete()}
+            className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+          >
+            {deleting ? "Deleting…" : "Delete PCM"}
+          </button>
+        )}
+      </div>
       {error && <p className="mt-4 text-red-600">{error}</p>}
       {!pcm && !error && <p className="mt-4 text-slate-600">Loading…</p>}
       {pcm && (
