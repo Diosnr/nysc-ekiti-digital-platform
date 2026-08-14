@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { staffFetch, getAccessToken } from "@/lib/staff-api";
+import { parseCsv, REGISTRATION_CSV_TEMPLATE } from "@/lib/csv";
 
 type PcmHit = {
   id: string;
@@ -25,6 +26,8 @@ type Officer = {
   zoneCode: string | null;
 };
 
+const CHUNK = 250;
+
 export default function RegistrationCommitteePage() {
   const [q, setQ] = useState("");
   const [pcm, setPcm] = useState<PcmHit | null>(null);
@@ -42,6 +45,9 @@ export default function RegistrationCommitteePage() {
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const [importProgress, setImportProgress] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -81,6 +87,68 @@ export default function RegistrationCommitteePage() {
         : "special-status-corps-members.csv";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function downloadTemplate() {
+    const blob = new Blob([REGISTRATION_CSV_TEMPLATE], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "registration-bulk-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function onBulkFile(file: File | null) {
+    if (!file) return;
+    setError(null);
+    setMsg(null);
+    setImportBusy(true);
+    setImportProgress("Reading file…");
+    try {
+      const text = await file.text();
+      const { rows } = parseCsv(text);
+      if (!rows.length) {
+        setError("CSV has no data rows");
+        return;
+      }
+      let jobId: string | null = null;
+      let created = 0;
+      let updated = 0;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        const done = i + CHUNK >= rows.length;
+        setImportProgress(
+          `Uploading ${Math.min(i + CHUNK, rows.length)} / ${rows.length}…`
+        );
+        const res = await staffFetch("/api/registration/import", {
+          method: "POST",
+          body: JSON.stringify({
+            jobId,
+            fileName: file.name,
+            totalRows: rows.length,
+            rows: chunk,
+            done,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(data.error ?? "Import chunk failed");
+          return;
+        }
+        jobId = data.jobId;
+        created = data.job?.createdCount ?? created;
+        updated = data.job?.updatedCount ?? updated;
+      }
+      setMsg(
+        `Import complete · created ${created} · updated ${updated} · ${rows.length} rows processed`
+      );
+      setImportProgress(null);
+    } catch {
+      setError("Could not read or upload CSV");
+    } finally {
+      setImportBusy(false);
+    }
   }
 
   async function search(e: FormEvent) {
@@ -174,8 +242,7 @@ export default function RegistrationCommitteePage() {
     <StaffShell>
       <h1 className="text-2xl font-bold text-slate-900">Registration Committee</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Export skilled / special-status lists. Capture PPA, LGI and ZI details not taken at
-        security intake.
+        Exports, single-record PPA/LGI/ZI capture, and bulk CSV upsert for large rolls.
       </p>
 
       {error && (
@@ -204,6 +271,32 @@ export default function RegistrationCommitteePage() {
         >
           Download special status (CSV)
         </button>
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800"
+        >
+          Bulk template
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-dashed border-nysc-green/40 bg-white p-5">
+        <h2 className="font-semibold text-slate-900">Bulk upload</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Upsert by call-up number. Existing records: fill empty identity fields; apply
+          registration columns when present. New rows need callUpNumber + fullName. Chunked
+          for large files (100k+).
+        </p>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          disabled={importBusy}
+          className="mt-3 block w-full text-sm"
+          onChange={(e) => void onBulkFile(e.target.files?.[0] ?? null)}
+        />
+        {importProgress && (
+          <p className="mt-2 text-sm font-medium text-nysc-green">{importProgress}</p>
+        )}
       </div>
 
       <form onSubmit={search} className="mt-8 flex flex-wrap gap-2">
@@ -256,7 +349,6 @@ export default function RegistrationCommitteePage() {
               onChange={(e) => setForm({ ...form, ppaAddress: e.target.value })}
             />
           </div>
-
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">LGI name</label>
             <select
@@ -272,11 +364,6 @@ export default function RegistrationCommitteePage() {
                 </option>
               ))}
             </select>
-            {lgis.length === 0 && (
-              <p className="mt-1 text-xs text-amber-700">
-                No LGI officers yet. Create users with the LGI role under Users.
-              </p>
-            )}
           </div>
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">LGI phone</label>
@@ -291,13 +378,8 @@ export default function RegistrationCommitteePage() {
                   {ph}
                 </option>
               ))}
-              {form.lgiPhone &&
-                !lgis.some((o) => o.phone === form.lgiPhone) && (
-                  <option value={form.lgiPhone}>{form.lgiPhone}</option>
-                )}
             </select>
           </div>
-
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">ZI name</label>
             <select
@@ -313,11 +395,6 @@ export default function RegistrationCommitteePage() {
                 </option>
               ))}
             </select>
-            {zis.length === 0 && (
-              <p className="mt-1 text-xs text-amber-700">
-                No Zonal Inspectors yet. Create users with the Zonal Inspector role.
-              </p>
-            )}
           </div>
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">ZI phone</label>
@@ -332,13 +409,8 @@ export default function RegistrationCommitteePage() {
                   {ph}
                 </option>
               ))}
-              {form.ziPhone &&
-                !zis.some((o) => o.phone === form.ziPhone) && (
-                  <option value={form.ziPhone}>{form.ziPhone}</option>
-                )}
             </select>
           </div>
-
           <div className="sm:col-span-2">
             <button
               type="submit"

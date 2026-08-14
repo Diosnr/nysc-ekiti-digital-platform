@@ -23,8 +23,7 @@ type NavItem = {
   label: string;
   perm: string | null;
   group?: "create";
-  /** special visibility handled in filter */
-  special?: "exit";
+  special?: "exit" | "platoon";
 };
 
 const ShellCtx = createContext(false);
@@ -37,6 +36,12 @@ const nav: NavItem[] = [
     href: "/staff/registration",
     label: "Registration",
     perm: "registration:complete",
+  },
+  {
+    href: "/staff/platoon",
+    label: "Platoon desk",
+    perm: "platoon:attendance",
+    special: "platoon",
   },
   {
     href: "/staff/exit",
@@ -60,6 +65,10 @@ const nav: NavItem[] = [
   { href: "/staff/admin/roles", label: "Roles", perm: "role:read" },
   { href: "/staff/admin/audit", label: "Audit log", perm: "audit:read" },
 ];
+
+function isPlatoonRole(roles: string[]) {
+  return roles.some((r) => r.toLowerCase().includes("platoon"));
+}
 
 export function StaffShell({ children }: { children: React.ReactNode }) {
   const nested = useContext(ShellCtx);
@@ -126,6 +135,13 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     roles.includes("Registration Officer") ||
     perms.includes("registration:complete");
   const exitDesk = canAccessExitDesk(roles, perms);
+  const platoonDesk =
+    isSuper ||
+    isPlatoonRole(roles) ||
+    perms.includes("platoon:attendance") ||
+    perms.includes("platoon:assign") ||
+    perms.includes("platoon:manage") ||
+    perms.includes("kit:issue");
 
   const can = (p: string | null) => {
     if (!p) return true;
@@ -133,6 +149,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (p === "pcm:read" && perms.includes("pcm:search")) return true;
     if (p === "registration:complete" && isRegistration) return true;
     if (p === "camp:exeat" && exitDesk) return true;
+    if (p === "platoon:attendance" && platoonDesk) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
     }
@@ -141,6 +158,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
 
   const visible = nav.filter((n) => {
     if (n.special === "exit") return exitDesk;
+    if (n.special === "platoon") return platoonDesk;
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
       return ["/staff/security/checkin", "/staff/pcm"].includes(n.href);
