@@ -204,7 +204,7 @@ export default function StaffDashboardPage() {
                     accent="sky"
                   />
                   <StatCard
-                    label="Inside the wire"
+                    label="Still in camp"
                     value={overview.strength.presentInCamp}
                     hint="Checked in and still in camp"
                     accent="green"
@@ -227,24 +227,20 @@ export default function StaffDashboardPage() {
                     {overview.departures.approvedTotal}
                   </p>
                   <p className="text-xs text-slate-500">
-                    Final coordinator approvals · {" "}
+                    Final coordinator approvals ·{" "}
                     <span className="font-medium text-amber-700">
                       {overview.departures.awaitingDecision} still in the pipeline
                     </span>
                   </p>
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-xl bg-rose-50 px-4 py-3">
-                      <p className="text-[11px] font-semibold uppercase text-rose-700">
-                        Marital
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase text-rose-700">Marital</p>
                       <p className="mt-1 text-2xl font-bold tabular-nums text-rose-900">
                         {g?.MARITAL ?? 0}
                       </p>
                     </div>
                     <div className="rounded-xl bg-sky-50 px-4 py-3">
-                      <p className="text-[11px] font-semibold uppercase text-sky-700">
-                        Medical
-                      </p>
+                      <p className="text-[11px] font-semibold uppercase text-sky-700">Medical</p>
                       <p className="mt-1 text-2xl font-bold tabular-nums text-sky-900">
                         {g?.MEDICAL ?? 0}
                       </p>
@@ -303,8 +299,8 @@ export default function StaffDashboardPage() {
                     </div>
                   </dl>
                   <p className="mt-4 text-[11px] leading-relaxed text-slate-400">
-                    Clinic numbers today reflect medical exit reviews. Full visit
-                    logs will deepen this panel when the clinic module ships.
+                    Clinic numbers today reflect medical exit reviews. Full visit logs will
+                    deepen this panel when the clinic module ships.
                   </p>
                 </div>
               </div>
@@ -336,9 +332,7 @@ export default function StaffDashboardPage() {
       )}
 
       <div className="mt-10">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Shortcuts
-        </h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Shortcuts</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(isSuper || perms.includes("pcm:read")) && (
             <Link
