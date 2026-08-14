@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
-import { requireAuth, jsonOk, jsonError } from "@/lib/api";
+import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { loadUserAuthContext } from "@/lib/auth-server";
 import { resolveGeoScope, pcmScopeWhere } from "@/lib/scope";
+import { writeAudit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -25,4 +26,43 @@ export async function GET(req: Request, { params }: Params) {
 
   if (!pcm) return jsonError("PCM not found", 404);
   return jsonOk({ pcm });
+}
+
+/** Super Admin only — permanently delete a PCM and related verification rows. */
+export async function DELETE(req: Request, { params }: Params) {
+  const auth = await requireAuth(req);
+  if (auth instanceof Response) return auth;
+
+  const isSuper =
+    auth.payload.roles.includes("Super Admin") ||
+    auth.payload.permissions.includes("*") ||
+    auth.payload.permissions.includes("pcm:delete");
+  if (!isSuper) {
+    return jsonError("Only Super Admin can delete PCM records", 403);
+  }
+
+  const { id } = await params;
+  const existing = await prisma.pcm.findUnique({ where: { id } });
+  if (!existing) return jsonError("PCM not found", 404);
+
+  await prisma.pcm.delete({ where: { id } });
+
+  const meta = clientMeta(req);
+  await writeAudit({
+    actorId: auth.payload.sub,
+    actorEmail: auth.payload.email,
+    actorRoleAtTime: auth.payload.roles.join(","),
+    action: "pcm.delete",
+    entityType: "Pcm",
+    entityId: id,
+    pcmId: id,
+    before: {
+      callUpNumber: existing.callUpNumber,
+      fullName: existing.fullName,
+    },
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+  });
+
+  return jsonOk({ deleted: true });
 }

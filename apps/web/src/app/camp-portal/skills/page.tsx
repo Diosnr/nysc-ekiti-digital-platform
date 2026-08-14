@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { CallUpLookup } from "@/components/CallUpLookup";
 
 const SKILL_OPTIONS = [
   "ICT / Computer",
@@ -18,19 +19,26 @@ const SKILL_OPTIONS = [
 ];
 
 export default function SkillsPage() {
+  const [pcm, setPcm] = useState<{ callUpNumber: string; fullName: string } | null>(
+    null
+  );
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!pcm) {
+      setError("Search and select a registered call-up number first");
+      return;
+    }
     setLoading(true);
     setError(null);
     setMsg(null);
     const fd = new FormData(e.currentTarget);
     const body = {
-      callUpNumber: String(fd.get("callUpNumber") || ""),
-      fullName: String(fd.get("fullName") || ""),
+      callUpNumber: pcm.callUpNumber,
+      fullName: pcm.fullName,
       skill1: String(fd.get("skill1") || ""),
       skill2: String(fd.get("skill2") || ""),
       skill3: String(fd.get("skill3") || ""),
@@ -48,6 +56,7 @@ export default function SkillsPage() {
       }
       setMsg("Skills submitted successfully.");
       e.currentTarget.reset();
+      setPcm(null);
     } catch {
       setError("Network error");
     } finally {
@@ -62,7 +71,7 @@ export default function SkillsPage() {
       </Link>
       <h1 className="mt-4 text-2xl font-bold text-slate-900">Skills</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Declare up to three skills. Link with your call-up number.
+        Declare up to three skills. Search your registered call-up number first.
       </p>
 
       {error && (
@@ -76,54 +85,47 @@ export default function SkillsPage() {
         </p>
       )}
 
-      <form onSubmit={onSubmit} className="mt-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <label className="text-xs font-semibold uppercase text-slate-500">Call-up number *</label>
-          <input
-            name="callUpNumber"
-            required
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold uppercase text-slate-500">Full name *</label>
-          <input
-            name="fullName"
-            required
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-        {(["skill1", "skill2", "skill3"] as const).map((name, i) => (
-          <div key={name}>
-            <label className="text-xs font-semibold uppercase text-slate-500">
-              Skill {i + 1}
-              {i === 0 ? " *" : ""}
-            </label>
-            <select
-              name={name}
-              required={i === 0}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              defaultValue=""
+      <div className="mt-8 space-y-4">
+        <CallUpLookup onFound={setPcm} onClear={() => setPcm(null)} />
+
+        {pcm && (
+          <form
+            onSubmit={onSubmit}
+            className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            {(["skill1", "skill2", "skill3"] as const).map((name, i) => (
+              <div key={name}>
+                <label className="text-xs font-semibold uppercase text-slate-500">
+                  Skill {i + 1}
+                  {i === 0 ? " *" : ""}
+                </label>
+                <select
+                  name={name}
+                  required={i === 0}
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  defaultValue=""
+                >
+                  <option value="" disabled>
+                    Select…
+                  </option>
+                  {SKILL_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             >
-              <option value="" disabled>
-                Select…
-              </option>
-              {SKILL_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-        ))}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-        >
-          {loading ? "Submitting…" : "Submit skills"}
-        </button>
-      </form>
+              {loading ? "Submitting…" : "Submit skills"}
+            </button>
+          </form>
+        )}
+      </div>
     </main>
   );
 }
