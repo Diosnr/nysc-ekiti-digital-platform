@@ -23,13 +23,14 @@ type NavItem = {
   label: string;
   perm: string | null;
   group?: "create";
-  special?: "exit" | "platoon";
+  special?: "exit" | "platoon" | "pro";
 };
 
 const ShellCtx = createContext(false);
 
 const nav: NavItem[] = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
+  { href: "/staff/pro", label: "Public Relations", perm: "news:manage", special: "pro" },
   { href: "/staff/security/checkin", label: "Security gate", perm: "security:checkin" },
   { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
   {
@@ -70,6 +71,31 @@ function isPlatoonRole(roles: string[]) {
   return roles.some((r) => r.toLowerCase().includes("platoon"));
 }
 
+function isProOnly(roles: string[], permissions: string[]) {
+  const isPro =
+    roles.some(
+      (r) =>
+        r.toLowerCase() === "pro" || r.toLowerCase().includes("public relations")
+    ) ||
+    (permissions.includes("news:manage") && permissions.includes("announcement:manage"));
+  if (!isPro) return false;
+  if (permissions.includes("*")) return false;
+  if (roles.some((r) => r.toLowerCase() === "super admin")) return false;
+  // PRO-only if they don't hold camp/ops roles
+  const ops = roles.some((r) =>
+    [
+      "security officer",
+      "registration officer",
+      "state coordinator",
+      "camp director",
+      "platoon",
+      "clinic",
+      "bank account",
+    ].some((k) => r.toLowerCase().includes(k))
+  );
+  return !ops;
+}
+
 export function StaffShell({ children }: { children: React.ReactNode }) {
   const nested = useContext(ShellCtx);
   if (nested) return <>{children}</>;
@@ -105,11 +131,18 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
           router.replace("/staff/login");
           return;
         }
-        setMe(await res.json());
+        const data = await res.json();
+        setMe(data);
         loaded.current = true;
+        if (
+          isProOnly(data.roles ?? [], data.permissions ?? []) &&
+          !pathname.startsWith("/staff/pro")
+        ) {
+          router.replace("/staff/pro");
+        }
       })
       .catch(() => router.replace("/staff/login"));
-  }, [router, bare]);
+  }, [router, bare, pathname]);
 
   function logout() {
     const refresh = localStorage.getItem("nysc_refresh_token");
@@ -131,6 +164,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const isSecurity = roles.includes("Security Officer");
   const isSuper =
     roles.some((r) => r.toLowerCase() === "super admin") || perms.includes("*");
+  const proOnly = isProOnly(roles, perms);
   const isRegistration =
     roles.includes("Registration Officer") ||
     perms.includes("registration:complete");
@@ -142,6 +176,14 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     perms.includes("platoon:assign") ||
     perms.includes("platoon:manage") ||
     perms.includes("kit:issue");
+  const proDesk =
+    isSuper ||
+    perms.includes("news:manage") ||
+    perms.includes("announcement:manage") ||
+    roles.some(
+      (r) =>
+        r.toLowerCase() === "pro" || r.toLowerCase().includes("public relations")
+    );
 
   const can = (p: string | null) => {
     if (!p) return true;
@@ -150,6 +192,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (p === "registration:complete" && isRegistration) return true;
     if (p === "camp:exeat" && exitDesk) return true;
     if (p === "platoon:attendance" && platoonDesk) return true;
+    if (p === "news:manage" && proDesk) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
     }
@@ -157,8 +200,12 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   };
 
   const visible = nav.filter((n) => {
+    if (proOnly) {
+      return n.href === "/staff/pro";
+    }
     if (n.special === "exit") return exitDesk;
     if (n.special === "platoon") return platoonDesk;
+    if (n.special === "pro") return proDesk;
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
       return ["/staff/security/checkin", "/staff/pcm"].includes(n.href);
@@ -200,7 +247,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
           <div className="leading-tight">
             <div className="text-sm font-bold text-slate-900">NYSC Ekiti</div>
             <div className="text-[11px] text-slate-500">
-              {isSecurity && !isSuper ? "Security" : "Staff"}
+              {proOnly ? "PRO" : isSecurity && !isSuper ? "Security" : "Staff"}
             </div>
           </div>
         </div>
