@@ -233,7 +233,6 @@ export default function StaffDashboardPage() {
         )}
       </div>
 
-      {/* Accommodation at-a-glance (Accommodation Officer primary view) */}
       {accOfficer && (
         <section className="mt-8 space-y-5">
           {accLoading && !accSummary ? (
@@ -254,7 +253,7 @@ export default function StaffDashboardPage() {
                 <StatCard
                   label="Total beds"
                   value={accSummary.beds}
-                  hint={`${occupancyPct}% occupied"`}
+                  hint={`${occupancyPct}% occupied`}
                   accent="sky"
                 />
                 <StatCard
@@ -266,7 +265,11 @@ export default function StaffDashboardPage() {
                 <StatCard
                   label="Occupied"
                   value={accSummary.occupied}
-                  hint={accSummary.blocked ? `${accSummary.blocked} blocked` : "Currently housed"}
+                  hint={
+                    accSummary.blocked
+                      ? `${accSummary.blocked} blocked`
+                      : "Currently housed"
+                  }
                   accent="amber"
                 />
               </div>
@@ -485,7 +488,6 @@ export default function StaffDashboardPage() {
         </section>
       )}
 
-      {/* Shortcuts — hidden for pure Accommodation Officer */}
       {!accOfficer && (
         <div className="mt-10">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
