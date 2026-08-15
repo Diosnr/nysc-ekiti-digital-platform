@@ -181,6 +181,57 @@ enum CampExitStage {
   CANCELLED
 }
 
+enum HostelGender {
+  MALE
+  FEMALE
+  MIXED
+}
+
+enum BedStatus {
+  VACANT
+  OCCUPIED
+  BLOCKED
+}
+
+model Hostel {
+  id                String        @id @default(cuid())
+  name              String
+  genderRestriction HostelGender  @default(MIXED)
+  capacity          Int
+  isActive          Boolean       @default(true)
+  notes             String?
+  sortOrder         Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  beds Bed[]
+
+  @@index([isActive])
+  @@index([genderRestriction])
+  @@index([sortOrder])
+}
+
+model Bed {
+  id               String    @id @default(cuid())
+  hostelId         String
+  hostel           Hostel    @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  code             String
+  status           BedStatus @default(VACANT)
+  currentPcmId     String?   @unique
+  currentPcm       Pcm?      @relation(fields: [currentPcmId], references: [id], onDelete: SetNull)
+  assignedAt       DateTime?
+  assignedById     String?
+  assignedByName   String?
+  note             String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([hostelId, code])
+  @@index([hostelId])
+  @@index([status])
+  @@index([currentPcmId])
+}
+
 model Pcm {
   id                    String             @id @default(cuid())
   callUpNumber          String             @unique
@@ -233,6 +284,7 @@ model Pcm {
   exitRequests     CampExitRequest[]
   attendance       PlatoonAttendance[]
   electronicFiles  ElectronicFile[]
+  bed              Bed?
 
   @@index([fullName])
   @@index([stateCode])
@@ -465,8 +517,6 @@ model ExitGroundOption {
   @@index([sortOrder])
 }
 
-// Electronic file movement spine (camp exit is type CAMP_EXIT)
-// CM = has stateCode; PCM = no stateCode (business rule)
 enum ElectronicFileType {
   CAMP_EXIT
   LEAVE
