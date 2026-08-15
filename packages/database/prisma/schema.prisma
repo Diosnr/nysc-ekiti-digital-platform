@@ -52,7 +52,7 @@ model PlatoonOfficerTenure {
   startedAt      DateTime  @default(now())
   endedAt        DateTime?
   assignedById   String?
-  assignedByName String?
+  assignedByName  String?
   note           String?
   createdAt      DateTime  @default(now())
 
@@ -412,7 +412,6 @@ model RegistrationImportJob {
   @@index([createdAt])
 }
 
-// Public content — managed by PRO
 model NewsArticle {
   id          String    @id @default(cuid())
   title       String
@@ -444,4 +443,19 @@ model Announcement {
   updatedAt   DateTime  @updatedAt
 
   @@index([published, publishedAt])
+}
+
+// Configurable grounds for camp-exit e-files (admin)
+model ExitGroundOption {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  label          String
+  requiresClinic Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
 }
