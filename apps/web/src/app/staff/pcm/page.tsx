@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { PcmPhoto } from "@/components/staff/PcmPhoto";
@@ -53,32 +53,44 @@ export default function PcmRegistryPage() {
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Pcm | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
   const [canIntake, setCanIntake] = useState(false);
   const [canViewNin, setCanViewNin] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  async function load(search?: string) {
+  const load = useCallback(async (search?: string, cursor?: string | null, append = false) => {
     setError(null);
-    setLoading(true);
-    const qs = search ? `?q=${encodeURIComponent(search)}` : "";
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    if (cursor) params.set("cursor", cursor);
+    params.set("limit", "30");
     try {
-      const res = await staffFetch(`/api/pcm${qs}`);
+      const res = await staffFetch(`/api/pcm?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? `Failed to load PCMs (${res.status})`);
         return;
       }
-      setPcms(data.pcms ?? []);
+      const list = (data.pcms ?? []) as Pcm[];
+      setPcms((prev) => (append ? [...prev, ...list] : list));
+      setNextCursor(data.nextCursor ?? null);
+      setHasMore(Boolean(data.hasMore));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    load();
+    void load();
     staffFetch("/api/auth/me").then(async (res) => {
       if (!res.ok) return;
       const me = await res.json();
@@ -102,7 +114,23 @@ export default function PcmRegistryPage() {
           roles.some((r) => r.toLowerCase().includes("bank account"))
       );
     });
-  }, []);
+  }, [load]);
+
+  // Infinite scroll
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingMore && !loading) {
+          void load(q || undefined, nextCursor, true);
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loadingMore, loading, nextCursor, q, load]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -128,7 +156,7 @@ export default function PcmRegistryPage() {
       return;
     }
     setSelectedId(null);
-    load(q);
+    void load(q || undefined);
   }
 
   return (
@@ -137,7 +165,7 @@ export default function PcmRegistryPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">PCM Registry</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Click a name to open details in the side panel.
+            Scroll to load more · click a name for the side panel.
           </p>
         </div>
         {canIntake && (
@@ -162,11 +190,11 @@ export default function PcmRegistryPage() {
           placeholder="Search name, call-up, state code…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && load(q)}
+          onKeyDown={(e) => e.key === "Enter" && void load(q || undefined)}
         />
         <button
           type="button"
-          onClick={() => load(q)}
+          onClick={() => void load(q || undefined)}
           className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium"
         >
           Search
@@ -174,7 +202,7 @@ export default function PcmRegistryPage() {
       </div>
 
       <div className="mt-6">
-        {loading ? (
+        {loading && !pcms.length ? (
           <TableSkeleton rows={8} />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -223,6 +251,27 @@ export default function PcmRegistryPage() {
             </table>
           </div>
         )}
+
+        <div ref={sentinelRef} className="py-4 text-center text-sm text-slate-500">
+          {loadingMore && (
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-nysc-green border-t-transparent" />
+              Loading more corps members…
+            </span>
+          )}
+          {!loadingMore && hasMore && (
+            <button
+              type="button"
+              className="text-nysc-green font-medium hover:underline"
+              onClick={() => void load(q || undefined, nextCursor, true)}
+            >
+              Load more
+            </button>
+          )}
+          {!loading && !hasMore && pcms.length > 0 && (
+            <span>End of list · {pcms.length} shown</span>
+          )}
+        </div>
       </div>
 
       {selectedId && (
