@@ -269,9 +269,13 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (accOnly) {
       return n.href === "/staff/dashboard" || n.href === "/staff/accommodation";
     }
-    // Clinic staff: Dashboard + Clinic only (no registry — patient search is inside clinic)
+    // Clinic staff: Dashboard + Clinic + E-File (medical exit / minutes)
     if (clinicOnly) {
-      return n.href === "/staff/dashboard" || n.href === "/staff/clinic";
+      return (
+        n.href === "/staff/dashboard" ||
+        n.href === "/staff/clinic" ||
+        n.href === "/staff/e-file"
+      );
     }
     if (n.special === "exit") return exitDesk;
     if (n.special === "platoon") return platoonDesk;

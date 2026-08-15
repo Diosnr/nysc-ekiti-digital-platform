@@ -107,6 +107,13 @@ export function canInitiateExit(roles: string[], permissions: string[]): boolean
   return isPlatoonRole(roles);
 }
 
+/**
+ * E-File menu / desk access — confirmed list:
+ * Super Admin, Platoon, Clinic roles, Camp Director, State Coordinator,
+ * Registry Officer, LGI, Zonal Inspector, Head CIM;
+ * or any of: camp:exeat, camp:exit:initiate, camp:clinic, file:create,
+ * file:forward, file:registry.
+ */
 export function canAccessExitDesk(roles: string[], permissions: string[]): boolean {
   if (
     permissions.includes("*") ||
@@ -114,7 +121,8 @@ export function canAccessExitDesk(roles: string[], permissions: string[]): boole
     permissions.includes("camp:exit:initiate") ||
     permissions.includes("camp:clinic") ||
     permissions.includes("file:create") ||
-    permissions.includes("file:forward")
+    permissions.includes("file:forward") ||
+    permissions.includes("file:registry")
   ) {
     return true;
   }
