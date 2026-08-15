@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { PcmPhoto } from "@/components/staff/PcmPhoto";
 import { TableSkeleton } from "@/components/Skeleton";
@@ -13,14 +14,18 @@ type Pcm = {
   fullName: string;
   gender: string | null;
   institution: string | null;
+  course?: string | null;
   status: string;
   deploymentState?: string | null;
   photographUrl?: string | null;
   campAddress?: string | null;
   dateReporting?: string | null;
   batchYear?: string | null;
+  stream?: string | null;
+  originState?: string | null;
   stateCode?: string | null;
   platoonCode?: string | null;
+  ppaName?: string | null;
   familyStatuses?: Array<{
     id: string;
     statusesJson: string;
@@ -49,6 +54,10 @@ type Pcm = {
 };
 
 export default function PcmRegistryPage() {
+  const searchParams = useSearchParams();
+  const kindParam = (searchParams.get("kind") || "").toLowerCase();
+  const kind = kindParam === "cm" || kindParam === "pcm" ? kindParam : "";
+
   const [pcms, setPcms] = useState<Pcm[]>([]);
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -64,30 +73,47 @@ export default function PcmRegistryPage() {
   const [canViewNin, setCanViewNin] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const load = useCallback(async (search?: string, cursor?: string | null, append = false) => {
-    setError(null);
-    if (append) setLoadingMore(true);
-    else setLoading(true);
-    const params = new URLSearchParams();
-    if (search) params.set("q", search);
-    if (cursor) params.set("cursor", cursor);
-    params.set("limit", "30");
-    try {
-      const res = await staffFetch(`/api/pcm?${params.toString()}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? `Failed to load PCMs (${res.status})`);
-        return;
+  const title =
+    kind === "cm"
+      ? "CM Registry"
+      : kind === "pcm"
+        ? "PCM Registry"
+        : "PCM / CM Registry";
+  const subtitle =
+    kind === "cm"
+      ? "Corps members with a state code · scroll to load more · click a name for details."
+      : kind === "pcm"
+        ? "Prospective corps members without a state code · scroll to load more."
+        : "All records · CM = has state code · PCM = without state code.";
+
+  const load = useCallback(
+    async (search?: string, cursor?: string | null, append = false) => {
+      setError(null);
+      if (append) setLoadingMore(true);
+      else setLoading(true);
+      const params = new URLSearchParams();
+      if (search) params.set("q", search);
+      if (cursor) params.set("cursor", cursor);
+      if (kind) params.set("kind", kind);
+      params.set("limit", "30");
+      try {
+        const res = await staffFetch(`/api/pcm?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(data.error ?? `Failed to load (${res.status})`);
+          return;
+        }
+        const list = (data.pcms ?? []) as Pcm[];
+        setPcms((prev) => (append ? [...prev, ...list] : list));
+        setNextCursor(data.nextCursor ?? null);
+        setHasMore(Boolean(data.hasMore));
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
       }
-      const list = (data.pcms ?? []) as Pcm[];
-      setPcms((prev) => (append ? [...prev, ...list] : list));
-      setNextCursor(data.nextCursor ?? null);
-      setHasMore(Boolean(data.hasMore));
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }, []);
+    },
+    [kind]
+  );
 
   useEffect(() => {
     void load();
@@ -116,7 +142,6 @@ export default function PcmRegistryPage() {
     });
   }, [load]);
 
-  // Infinite scroll
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el || !hasMore) return;
@@ -163,19 +188,49 @@ export default function PcmRegistryPage() {
     <StaffShell>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">PCM Registry</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Scroll to load more · click a name for the side panel.
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+          <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
         </div>
-        {canIntake && (
+        <div className="flex flex-wrap gap-2">
           <Link
-            href="/staff/pcm/intake"
-            className="rounded-md bg-nysc-green px-3 py-2 text-sm font-semibold text-white"
+            href="/staff/pcm"
+            className={`rounded-md px-3 py-2 text-sm font-medium ${
+              !kind
+                ? "bg-nysc-green text-white"
+                : "border border-slate-300 bg-white text-slate-700"
+            }`}
           >
-            New intake
+            All
           </Link>
-        )}
+          <Link
+            href="/staff/pcm?kind=pcm"
+            className={`rounded-md px-3 py-2 text-sm font-medium ${
+              kind === "pcm"
+                ? "bg-nysc-green text-white"
+                : "border border-slate-300 bg-white text-slate-700"
+            }`}
+          >
+            PCM only
+          </Link>
+          <Link
+            href="/staff/pcm?kind=cm"
+            className={`rounded-md px-3 py-2 text-sm font-medium ${
+              kind === "cm"
+                ? "bg-nysc-green text-white"
+                : "border border-slate-300 bg-white text-slate-700"
+            }`}
+          >
+            CM only
+          </Link>
+          {canIntake && (
+            <Link
+              href="/staff/pcm/intake"
+              className="rounded-md bg-nysc-green px-3 py-2 text-sm font-semibold text-white"
+            >
+              New intake
+            </Link>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -212,6 +267,7 @@ export default function PcmRegistryPage() {
                   <th className="px-4 py-3">Photo</th>
                   <th className="px-4 py-3">Call-up</th>
                   <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">State code</th>
                   <th className="px-4 py-3">Deployment</th>
                   <th className="px-4 py-3">Status</th>
                 </tr>
@@ -219,7 +275,7 @@ export default function PcmRegistryPage() {
               <tbody>
                 {pcms.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                       No records.
                       {canIntake ? " Use New intake to register." : ""}
                     </td>
@@ -241,6 +297,15 @@ export default function PcmRegistryPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs">{p.callUpNumber}</td>
                     <td className="px-4 py-3 font-medium text-nysc-green">{p.fullName}</td>
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {p.stateCode ? (
+                        <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-800">
+                          {p.stateCode}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">PCM</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-600">
                       {p.deploymentState ?? "—"}
                     </td>
@@ -256,7 +321,7 @@ export default function PcmRegistryPage() {
           {loadingMore && (
             <span className="inline-flex items-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-nysc-green border-t-transparent" />
-              Loading more corps members…
+              Loading more…
             </span>
           )}
           {!loadingMore && hasMore && (
@@ -284,7 +349,9 @@ export default function PcmRegistryPage() {
           />
           <div className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl sm:max-w-lg">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-              <h2 className="text-lg font-bold text-slate-900">PCM details</h2>
+              <h2 className="text-lg font-bold text-slate-900">
+                {detail?.stateCode ? "CM details" : "PCM details"}
+              </h2>
               <button
                 type="button"
                 onClick={() => setSelectedId(null)}
@@ -312,6 +379,13 @@ export default function PcmRegistryPage() {
                       <p className="mt-2 inline-flex rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-800">
                         {detail.status}
                       </p>
+                      {detail.stateCode ? (
+                        <p className="mt-1 text-xs font-medium text-emerald-700">
+                          CM · {detail.stateCode}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">PCM · no state code</p>
+                      )}
                     </div>
                   </div>
 
@@ -324,8 +398,12 @@ export default function PcmRegistryPage() {
                         [
                           ["Gender", detail.gender],
                           ["Institution", detail.institution],
+                          ["Course", detail.course],
+                          ["Stream", detail.stream],
+                          ["Origin", detail.originState],
                           ["Deployment", detail.deploymentState],
                           ["State code", detail.stateCode],
+                          ["PPA", detail.ppaName],
                           ["Platoon", detail.platoonCode ? `Platoon ${detail.platoonCode}` : null],
                           ["Camp", detail.campAddress],
                           ["Reporting", detail.dateReporting],
@@ -437,7 +515,7 @@ export default function PcmRegistryPage() {
                       onClick={() => void onDelete(detail.id, detail.fullName)}
                       className="w-full rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700"
                     >
-                      Delete PCM
+                      Delete record
                     </button>
                   )}
                 </div>
