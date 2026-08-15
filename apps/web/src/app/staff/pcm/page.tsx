@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { StaffShell } from "@/components/staff/StaffShell";
@@ -53,7 +53,7 @@ type Pcm = {
   }>;
 };
 
-export default function PcmRegistryPage() {
+function PcmRegistryInner() {
   const searchParams = useSearchParams();
   const kindParam = (searchParams.get("kind") || "").toLowerCase();
   // Default: PCM only (no state code). Use kind=all for full roll, kind=cm for CMs.
@@ -189,7 +189,7 @@ export default function PcmRegistryPage() {
   }
 
   return (
-    <StaffShell>
+    <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
@@ -427,92 +427,6 @@ export default function PcmRegistryPage() {
                     </dl>
                   </section>
 
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Special status
-                    </h3>
-                    {(detail.familyStatuses?.length ?? 0) === 0 && (
-                      <p className="mt-2 text-sm text-slate-500">No submissions yet.</p>
-                    )}
-                    {detail.familyStatuses?.map((f) => {
-                      let statuses: string[] = [];
-                      try {
-                        statuses = JSON.parse(f.statusesJson);
-                      } catch {
-                        statuses = [];
-                      }
-                      return (
-                        <div
-                          key={f.id}
-                          className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
-                        >
-                          <p className="font-medium text-slate-900">
-                            {statuses.join(", ") || "—"}
-                          </p>
-                          {f.husbandName && (
-                            <p className="mt-1 text-slate-600">Husband: {f.husbandName}</p>
-                          )}
-                          <p className="mt-1 text-slate-600">Address: {f.address}</p>
-                        </div>
-                      );
-                    })}
-                  </section>
-
-                  <section>
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Skills
-                    </h3>
-                    {(detail.skillProfiles?.length ?? 0) === 0 && (
-                      <p className="mt-2 text-sm text-slate-500">No submissions yet.</p>
-                    )}
-                    {detail.skillProfiles?.map((s) => (
-                      <div
-                        key={s.id}
-                        className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
-                      >
-                        {[s.skill1, s.skill2, s.skill3].filter(Boolean).join(" · ") ||
-                          "—"}
-                      </div>
-                    ))}
-                  </section>
-
-                  {canViewNin && (
-                    <section>
-                      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                        Account / NIN
-                      </h3>
-                      {(detail.ninRecords?.length ?? 0) === 0 && (
-                        <p className="mt-2 text-sm text-slate-500">No submissions yet.</p>
-                      )}
-                      {detail.ninRecords?.map((n) => (
-                        <div
-                          key={n.id}
-                          className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm"
-                        >
-                          {n.nin && <p>NIN: {n.nin}</p>}
-                          <div className="mt-2 flex gap-2">
-                            {n.frontUrl && (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={n.frontUrl}
-                                alt="NIN front"
-                                className="h-20 w-28 rounded border object-cover"
-                              />
-                            )}
-                            {n.backUrl && (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={n.backUrl}
-                                alt="NIN back"
-                                className="h-20 w-28 rounded border object-cover"
-                              />
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </section>
-                  )}
-
                   {isSuper && (
                     <button
                       type="button"
@@ -528,6 +442,23 @@ export default function PcmRegistryPage() {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+export default function PcmRegistryPage() {
+  return (
+    <StaffShell>
+      <Suspense
+        fallback={
+          <div className="space-y-4">
+            <div className="h-8 w-48 animate-pulse rounded bg-slate-200" />
+            <TableSkeleton rows={6} />
+          </div>
+        }
+      >
+        <PcmRegistryInner />
+      </Suspense>
     </StaffShell>
   );
 }
