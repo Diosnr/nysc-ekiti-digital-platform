@@ -12,6 +12,7 @@ import {
   canInitiateExit,
   canActOnStage,
   firstStageAfterInitiation,
+  nextStageAfterApprove,
   type ExitStage,
 } from "@/lib/exit-workflow";
 
@@ -36,6 +37,16 @@ type Officer = {
   suggested?: boolean;
 };
 
+type Minute = {
+  id: string;
+  fromName: string;
+  toName?: string | null;
+  body: string;
+  action: string;
+  createdAt: string;
+  attachments?: string[];
+};
+
 type ExitReq = {
   id: string;
   ground: string;
@@ -54,6 +65,7 @@ type ExitReq = {
   coordinatorNote?: string | null;
   rejectedByName?: string | null;
   rejectReason?: string | null;
+  minutes?: Minute[];
   pcm: {
     id: string;
     callUpNumber: string;
@@ -97,6 +109,8 @@ export default function EFilingPage() {
   );
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [nextToUserId, setNextToUserId] = useState("");
+  const [actOfficers, setActOfficers] = useState<Officer[]>([]);
+  const [actNextTo, setActNextTo] = useState("");
 
   useEffect(() => {
     staffFetch("/api/auth/me").then(async (res) => {
@@ -179,23 +193,40 @@ export default function EFilingPage() {
   function openDetail(row: ExitReq) {
     setError(null);
     setNote("");
-    setSelected({ ...row, photoUrls: row.photoUrls ?? [] });
-    if ((row.photoCount ?? 0) > 0 || (row.photoUrls?.length ?? 0) > 0) {
-      setPhotosLoading(true);
-      staffFetch(`/api/exit-requests/${row.id}?photos=1`)
-        .then(async (res) => {
-          if (!res.ok) return;
-          const data = await res.json();
-          const full = data.request as ExitReq;
-          setSelected((prev) =>
-            prev && prev.id === row.id
-              ? { ...prev, ...full, pcm: { ...prev.pcm, ...full.pcm } }
-              : prev
-          );
-        })
-        .catch(() => {})
-        .finally(() => setPhotosLoading(false));
-    }
+    setActNextTo("");
+    setSelected({ ...row, photoUrls: row.photoUrls ?? [], minutes: row.minutes ?? [] });
+    setPhotosLoading(true);
+    staffFetch(`/api/exit-requests/${row.id}?photos=1`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        const full = data.request as ExitReq;
+        setSelected((prev) =>
+          prev && prev.id === row.id
+            ? { ...prev, ...full, pcm: { ...prev.pcm, ...full.pcm } }
+            : prev
+        );
+        // Officers for next hop when approving
+        if (full.stage && !['APPROVED', 'REJECTED', 'CANCELLED'].includes(full.stage)) {
+          const nxt = nextStageAfterApprove(full.stage as ExitStage, full.ground);
+          if (nxt !== "APPROVED") {
+            staffFetch(`/api/e-file/officers?stage=${nxt}`)
+              .then(async (r) => {
+                if (!r.ok) return;
+                const d = await r.json();
+                const list = (d.officers ?? []) as Officer[];
+                setActOfficers(list);
+                const sug = list.find((o) => o.suggested);
+                setActNextTo(sug?.id || "");
+              })
+              .catch(() => setActOfficers([]));
+          } else {
+            setActOfficers([]);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPhotosLoading(false));
   }
 
   async function decide(decision: "approve" | "reject") {
@@ -206,14 +237,19 @@ export default function EFilingPage() {
     try {
       const res = await staffFetch(`/api/exit-requests/${selected.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ decision, note: note || undefined }),
+        body: JSON.stringify({
+          decision,
+          note: note || undefined,
+          nextToUserId:
+            decision === "approve" && actNextTo ? actNextTo : undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? "Action failed");
         return;
       }
-      setMsg(decision === "approve" ? "Approved — moved to next stage" : "Returned");
+      setMsg(decision === "approve" ? "Minute recorded — file advanced" : "File returned");
       setSelected(null);
       await loadList();
     } catch {
@@ -346,9 +382,9 @@ export default function EFilingPage() {
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         {(
           [
-            ["my_queue", "Pending for me", "slate"],
-            ["approved", "Approved", "emerald"],
-            ["rejected", "Returned / rejected", "rose"],
+            ["my_queue", "Pending for me"],
+            ["approved", "Approved"],
+            ["rejected", "Returned / rejected"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -423,8 +459,8 @@ export default function EFilingPage() {
           <div>
             <h2 className="font-semibold text-slate-900">Create file</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Type: <strong>Camp exit</strong>. Grounds come from admin catalogue. Choose who
-              receives it next or keep the default chain.
+              Type: <strong>Camp exit</strong>. Grounds from admin catalogue. Choose who receives
+              it next or keep the default chain.
             </p>
           </div>
           <form onSubmit={searchPcm} className="flex gap-2">
@@ -494,9 +530,6 @@ export default function EFilingPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  ★ = suggested for the next stage. Blank = standard role chain.
-                </p>
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase text-slate-500">Minute</label>
@@ -610,45 +643,74 @@ export default function EFilingPage() {
               </div>
             </div>
             <div className="space-y-4 p-5 text-sm">
-              {selected.reasonDetail && (
-                <p className="rounded-md bg-slate-50 p-2 whitespace-pre-wrap">{selected.reasonDetail}</p>
-              )}
-              {selected.nextAssigneeName && (
-                <p className="text-xs text-slate-500">Routed to: {selected.nextAssigneeName}</p>
-              )}
               <section>
-                <h3 className="text-xs font-semibold uppercase text-slate-500">Minute trail</h3>
-                <ul className="mt-2 space-y-2">
-                  <li>
-                    Opened by <strong>{selected.initiatedByName}</strong> ·{" "}
-                    {new Date(selected.initiatedAt).toLocaleString()}
-                  </li>
-                  {selected.clinicByName && (
-                    <li>
-                      Clinic: <strong>{selected.clinicByName}</strong>
-                      {selected.clinicNote ? ` — ${selected.clinicNote}` : ""}
-                    </li>
-                  )}
-                  {selected.directorByName && (
-                    <li>
-                      Director: <strong>{selected.directorByName}</strong>
-                      {selected.directorNote ? ` — ${selected.directorNote}` : ""}
-                    </li>
-                  )}
-                  {selected.coordinatorByName && (
-                    <li>
-                      Coordinator: <strong>{selected.coordinatorByName}</strong>
-                      {selected.coordinatorNote ? ` — ${selected.coordinatorNote}` : ""}
-                    </li>
-                  )}
-                  {selected.rejectedByName && (
-                    <li className="text-red-700">
-                      Returned by <strong>{selected.rejectedByName}</strong>
-                    </li>
-                  )}
-                </ul>
+                <h3 className="text-xs font-semibold uppercase text-slate-500">
+                  Digital minute sheet
+                </h3>
+                {photosLoading && !selected.minutes?.length && (
+                  <p className="mt-2 text-xs text-slate-400">Loading minutes…</p>
+                )}
+                <div className="mt-3 space-y-4">
+                  {(selected.minutes && selected.minutes.length > 0
+                    ? selected.minutes
+                    : [
+                        {
+                          id: "legacy",
+                          fromName: selected.initiatedByName,
+                          toName: selected.nextAssigneeName,
+                          body: selected.reasonDetail || "File opened",
+                          action: "FORWARD",
+                          createdAt: selected.initiatedAt,
+                        } as Minute,
+                      ]
+                  ).map((m) => (
+                    <div
+                      key={m.id}
+                      className="rounded-xl border border-slate-100 bg-slate-50/80 p-3"
+                    >
+                      <p className="text-[11px] font-medium text-slate-400">
+                        {new Date(m.createdAt).toLocaleString()}
+                        {" · "}
+                        <span className="uppercase tracking-wide">{m.action}</span>
+                      </p>
+                      <p className="mt-1 text-xs text-slate-600">
+                        <strong>FROM:</strong> {m.fromName}
+                        {m.toName ? (
+                          <>
+                            <br />
+                            <strong>TO:</strong> {m.toName}
+                          </>
+                        ) : null}
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-slate-800">{m.body}</p>
+                    </div>
+                  ))}
+                </div>
+                {/* Legacy stage names if no e-file minutes yet */}
+                {!selected.minutes?.length && (
+                  <ul className="mt-3 space-y-1 text-xs text-slate-500">
+                    {selected.clinicByName && (
+                      <li>
+                        Clinic: {selected.clinicByName}
+                        {selected.clinicNote ? ` — ${selected.clinicNote}` : ""}
+                      </li>
+                    )}
+                    {selected.directorByName && (
+                      <li>
+                        Director: {selected.directorByName}
+                        {selected.directorNote ? ` — ${selected.directorNote}` : ""}
+                      </li>
+                    )}
+                    {selected.coordinatorByName && (
+                      <li>
+                        Coordinator: {selected.coordinatorByName}
+                        {selected.coordinatorNote ? ` — ${selected.coordinatorNote}` : ""}
+                      </li>
+                    )}
+                  </ul>
+                )}
               </section>
-              {photosLoading && <p className="text-xs text-slate-400">Loading photos…</p>}
+
               {selected.photoUrls?.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {selected.photoUrls.map((u, i) => (
@@ -657,16 +719,41 @@ export default function EFilingPage() {
                   ))}
                 </div>
               )}
+
               {canActOnStage(selected.stage, roles, perms) && (
-                <section className="border-t pt-4">
+                <section className="border-t pt-4 space-y-3">
+                  <label className="text-xs font-semibold uppercase text-slate-500">
+                    Add minute
+                  </label>
                   <textarea
-                    rows={2}
+                    rows={3}
                     className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Add minute…"
+                    placeholder="Write your minute…"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
-                  <div className="mt-3 flex gap-2">
+                  {selected.stage !== "AWAITING_STATE_COORDINATOR" && (
+                    <div>
+                      <label className="text-xs font-semibold uppercase text-slate-500">
+                        Forward next to
+                      </label>
+                      <select
+                        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                        value={actNextTo}
+                        onChange={(e) => setActNextTo(e.target.value)}
+                      >
+                        <option value="">Default next stage</option>
+                        {actOfficers.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.suggested ? "★ " : ""}
+                            {o.name}
+                            {o.roles[0] ? ` · ${o.roles[0]}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
                     <button
                       type="button"
                       disabled={loading}
