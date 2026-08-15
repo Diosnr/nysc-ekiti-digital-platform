@@ -45,9 +45,29 @@ type Minute = {
   body: string;
   action: string;
   createdAt: string;
+  attachments?: string[];
+  cc?: { id: string; name: string }[];
+};
+
+type PcmCard = {
+  id: string;
+  callUpNumber: string;
+  fullName: string;
+  photographUrl?: string | null;
+  institution?: string | null;
+  deploymentState?: string | null;
+  dateReporting?: string | null;
+  stateCode?: string | null;
+  gender?: string | null;
+  stream?: string | null;
+  originState?: string | null;
+  course?: string | null;
+  ppaName?: string | null;
+  status?: string;
 };
 
 type ExitReq = {
+  kind: "exit";
   id: string;
   ground: string;
   reasonDetail: string | null;
@@ -57,32 +77,67 @@ type ExitReq = {
   initiatedByName: string;
   initiatedAt: string;
   nextAssigneeName?: string | null;
-  clinicByName?: string | null;
-  clinicNote?: string | null;
-  directorByName?: string | null;
-  directorNote?: string | null;
-  coordinatorByName?: string | null;
-  coordinatorNote?: string | null;
-  rejectedByName?: string | null;
   minutes?: Minute[];
-  pcm: {
-    id: string;
-    callUpNumber: string;
-    fullName: string;
-    photographUrl?: string | null;
-    institution?: string | null;
-    deploymentState?: string | null;
-    dateReporting?: string | null;
-  };
+  pcm: PcmCard;
 };
 
+type EFileRow = {
+  kind: "efile";
+  id: string;
+  type: string;
+  subject: string;
+  priority?: string;
+  status: string;
+  openedByName?: string | null;
+  currentHolderName?: string | null;
+  currentHolderId?: string | null;
+  createdAt: string;
+  preview?: string | null;
+  canAct?: boolean;
+  minutes?: Minute[];
+  pcm: PcmCard;
+};
+
+type Unified = ExitReq | EFileRow;
+
 type Tab = "my_queue" | "pending" | "approved" | "rejected" | "create";
+
+const TYPE_LABELS: Record<string, string> = {
+  GENERAL: "General correspondence",
+  SICK_LEAVE: "Sick Leave",
+  CASUAL_LEAVE: "Casual Leave",
+  MATERNITY_LEAVE: "Maternity leave",
+  CONVOCATION_LEAVE: "Convocation leave",
+  RELOCATION: "Relocation",
+  REPOSTING: "Reposting",
+  CAMP_EXIT: "Camp exit",
+  QUERY: "Query",
+  OTHERS: "Others",
+  LEAVE: "Leave",
+};
+
+function typeLabel(t: string) {
+  return TYPE_LABELS[t] || t;
+}
+
+function statusLabel(s: string) {
+  const map: Record<string, string> = {
+    DRAFT: "Draft",
+    IN_TRANSIT: "In transit",
+    PENDING: "Pending",
+    APPROVED: "Approved",
+    RETURNED: "Returned",
+    REJECTED: "Rejected",
+    CLOSED: "Closed",
+  };
+  return map[s] ?? s;
+}
 
 export default function EFilingPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [tab, setTab] = useState<Tab | null>(null);
-  const [list, setList] = useState<ExitReq[]>([]);
-  const [selected, setSelected] = useState<ExitReq | null>(null);
+  const [list, setList] = useState<Unified[]>([]);
+  const [selected, setSelected] = useState<Unified | null>(null);
   const [photosLoading, setPhotosLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -97,6 +152,7 @@ export default function EFilingPage() {
   );
   const [actOfficers, setActOfficers] = useState<Officer[]>([]);
   const [actNextTo, setActNextTo] = useState("");
+  const [actNextIds, setActNextIds] = useState<string[]>([]);
 
   useEffect(() => {
     staffFetch("/api/auth/me").then(async (res) => {
@@ -132,29 +188,77 @@ export default function EFilingPage() {
     setLoading(true);
     setError(null);
     try {
-      let url = "/api/exit-requests?bucket=pending";
-      if (tab === "approved") url = "/api/exit-requests?bucket=approved";
-      if (tab === "rejected") url = "/api/exit-requests?bucket=rejected";
-      if (tab === "pending") url = "/api/exit-requests?bucket=pending";
-      // Role-specific queue (clinic / director / coordinator)
+      // --- Camp exit rows ---
+      let exitUrl = "/api/exit-requests?bucket=pending";
+      if (tab === "approved") exitUrl = "/api/exit-requests?bucket=approved";
+      if (tab === "rejected") exitUrl = "/api/exit-requests?bucket=rejected";
+      if (tab === "pending") exitUrl = "/api/exit-requests?bucket=pending";
       if (tab === "my_queue" && myStage) {
-        url = `/api/exit-requests?stage=${myStage}`;
+        exitUrl = `/api/exit-requests?stage=${myStage}`;
+      } else if (tab === "my_queue" && canStart && !isSuper) {
+        exitUrl = "/api/exit-requests?mine=1";
+      } else if (tab === "my_queue") {
+        exitUrl = "/api/exit-requests?bucket=pending";
       }
-      // Platoon initiators: open filings they started (still pending only)
-      else if (tab === "my_queue" && canStart && !isSuper) {
-        url = "/api/exit-requests?mine=1";
+
+      // --- Electronic files (non-exit) ---
+      let efileUrl = "/api/e-file/files?bucket=pending";
+      if (tab === "approved") efileUrl = "/api/e-file/files?bucket=approved";
+      if (tab === "rejected") efileUrl = "/api/e-file/files?bucket=rejected";
+      if (tab === "pending") efileUrl = "/api/e-file/files?bucket=pending";
+      if (tab === "my_queue") {
+        // Inbox: files currently with me; Super Admin sees all pending
+        efileUrl = isSuper
+          ? "/api/e-file/files?bucket=pending"
+          : "/api/e-file/files?bucket=pending&holder=1";
       }
-      // Super Admin / others without a stage: all still-open files
-      else if (tab === "my_queue") {
-        url = "/api/exit-requests?bucket=pending";
-      }
-      const res = await staffFetch(url);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? "Failed to load");
+
+      const [exitRes, efileRes] = await Promise.all([
+        staffFetch(exitUrl),
+        staffFetch(efileUrl),
+      ]);
+
+      const exitData = await exitRes.json().catch(() => ({}));
+      const efileData = await efileRes.json().catch(() => ({}));
+
+      if (!exitRes.ok && !efileRes.ok) {
+        setError(exitData.error || efileData.error || "Failed to load");
         return;
       }
-      setList(data.requests ?? []);
+
+      const exits: ExitReq[] = ((exitData.requests ?? []) as Omit<ExitReq, "kind">[]).map(
+        (r) => ({ ...r, kind: "exit" as const, photoUrls: r.photoUrls ?? [] })
+      );
+
+      const efiles: EFileRow[] = ((efileData.files ?? []) as Array<{
+        id: string;
+        type: string;
+        subject: string;
+        priority?: string;
+        status: string;
+        openedByName?: string | null;
+        currentHolderName?: string | null;
+        currentHolderId?: string | null;
+        createdAt: string;
+        preview?: string | null;
+        pcm: PcmCard;
+      }>)
+        .filter((f) => f.type !== "CAMP_EXIT")
+        .map((f) => ({ ...f, kind: "efile" as const }));
+
+      const merged: Unified[] = [...exits, ...efiles].sort((a, b) => {
+        const ta =
+          a.kind === "exit"
+            ? new Date(a.initiatedAt).getTime()
+            : new Date(a.createdAt).getTime();
+        const tb =
+          b.kind === "exit"
+            ? new Date(b.initiatedAt).getTime()
+            : new Date(b.createdAt).getTime();
+        return tb - ta;
+      });
+
+      setList(merged);
     } catch {
       setError("Network error");
     } finally {
@@ -166,43 +270,81 @@ export default function EFilingPage() {
     void loadList();
   }, [loadList]);
 
-  function openDetail(row: ExitReq) {
+  function openDetail(row: Unified) {
     setError(null);
     setNote("");
     setActNextTo("");
-    setSelected({ ...row, photoUrls: row.photoUrls ?? [], minutes: row.minutes ?? [] });
+    setActNextIds([]);
+    setSelected(row);
     setPhotosLoading(true);
-    staffFetch(`/api/exit-requests/${row.id}?photos=1`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        const data = await res.json();
-        const full = data.request as ExitReq;
-        setSelected((prev) =>
-          prev && prev.id === row.id
-            ? { ...prev, ...full, pcm: { ...prev.pcm, ...full.pcm } }
-            : prev
-        );
-        if (full.stage && !["APPROVED", "REJECTED", "CANCELLED"].includes(full.stage)) {
-          const nxt = nextStageAfterApprove(full.stage as ExitStage, full.ground);
-          if (nxt !== "APPROVED") {
-            staffFetch(`/api/e-file/officers?stage=${nxt}`)
+
+    if (row.kind === "exit") {
+      staffFetch(`/api/exit-requests/${row.id}?photos=1`)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = await res.json();
+          const full = data.request as ExitReq;
+          setSelected((prev) =>
+            prev && prev.kind === "exit" && prev.id === row.id
+              ? {
+                  ...prev,
+                  ...full,
+                  kind: "exit",
+                  pcm: { ...prev.pcm, ...full.pcm },
+                }
+              : prev
+          );
+          if (
+            full.stage &&
+            !["APPROVED", "REJECTED", "CANCELLED"].includes(full.stage)
+          ) {
+            const nxt = nextStageAfterApprove(full.stage as ExitStage, full.ground);
+            if (nxt !== "APPROVED") {
+              staffFetch(`/api/e-file/officers?stage=${nxt}`)
+                .then(async (r) => {
+                  if (!r.ok) return;
+                  const d = await r.json();
+                  const list = (d.officers ?? []) as Officer[];
+                  setActOfficers(list);
+                  setActNextTo(list.find((o) => o.suggested)?.id || "");
+                })
+                .catch(() => setActOfficers([]));
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setPhotosLoading(false));
+    } else {
+      staffFetch(`/api/e-file/files/${row.id}`)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const data = await res.json();
+          const full = data.file as EFileRow;
+          setSelected((prev) =>
+            prev && prev.kind === "efile" && prev.id === row.id
+              ? { ...prev, ...full, kind: "efile" }
+              : prev
+          );
+          if (
+            full.canAct &&
+            ["DRAFT", "IN_TRANSIT", "PENDING"].includes(full.status)
+          ) {
+            staffFetch("/api/e-file/officers")
               .then(async (r) => {
                 if (!r.ok) return;
                 const d = await r.json();
-                const list = (d.officers ?? []) as Officer[];
-                setActOfficers(list);
-                setActNextTo(list.find((o) => o.suggested)?.id || "");
+                setActOfficers((d.officers ?? []) as Officer[]);
               })
               .catch(() => setActOfficers([]));
           }
-        }
-      })
-      .catch(() => {})
-      .finally(() => setPhotosLoading(false));
+        })
+        .catch(() => {})
+        .finally(() => setPhotosLoading(false));
+    }
   }
 
-  async function decide(decision: "approve" | "reject") {
-    if (!selected) return;
+  async function decideExit(decision: "approve" | "reject") {
+    if (!selected || selected.kind !== "exit") return;
     setLoading(true);
     setError(null);
     setMsg(null);
@@ -221,7 +363,11 @@ export default function EFilingPage() {
         setError(data.error ?? "Action failed");
         return;
       }
-      setMsg(decision === "approve" ? "Minute recorded — file advanced" : "File returned");
+      setMsg(
+        decision === "approve"
+          ? "Minute recorded — file advanced"
+          : "File returned"
+      );
       setSelected(null);
       await loadList();
     } catch {
@@ -229,6 +375,60 @@ export default function EFilingPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function decideEfile(
+    decision: "forward" | "return" | "approve" | "reject"
+  ) {
+    if (!selected || selected.kind !== "efile") return;
+    if (decision === "forward" && !actNextIds.length && !actNextTo) {
+      setError("Select at least one officer to forward to");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setMsg(null);
+    try {
+      const ids =
+        actNextIds.length > 0
+          ? actNextIds
+          : actNextTo
+            ? [actNextTo]
+            : [];
+      const res = await staffFetch(`/api/e-file/files/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          decision,
+          note: note || undefined,
+          nextToUserIds: ids.length ? ids : undefined,
+          nextToUserId: ids[0] || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Action failed");
+        return;
+      }
+      const labels: Record<string, string> = {
+        forward: "File forwarded",
+        return: "File returned",
+        approve: "File approved and closed",
+        reject: "File rejected",
+      };
+      setMsg(labels[decision] || "Done");
+      setSelected(null);
+      await loadList();
+    } catch {
+      setError("Network error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggleNextOfficer(id: string) {
+    setActNextIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   }
 
   const tabs: { id: Tab; label: string }[] = [
@@ -251,8 +451,8 @@ export default function EFilingPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">E-Filing</h1>
           <p className="mt-1 max-w-xl text-sm text-slate-600">
-            Digital minutes on corps member files. Choose the file type when creating — general,
-            leave, relocation, or camp exit.
+            Digital minutes — leave, relocation, query, general correspondence and camp
+            exit. Files stay with the current holder until forwarded or closed.
           </p>
         </div>
         {canCreateFile && (
@@ -275,7 +475,14 @@ export default function EFilingPage() {
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         {(
           [
-            ["my_queue", myStage ? "Pending for me" : canStart && !isSuper ? "My open filings" : "Pending for me"],
+            [
+              "my_queue",
+              myStage
+                ? "Pending for me"
+                : canStart && !isSuper
+                  ? "My open filings"
+                  : "Pending for me",
+            ],
             ["approved", "Approved"],
             ["rejected", "Returned / rejected"],
           ] as const
@@ -373,7 +580,7 @@ export default function EFilingPage() {
           ) : (
             <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white">
               {list.map((r) => (
-                <li key={r.id}>
+                <li key={`${r.kind}-${r.id}`}>
                   <button
                     type="button"
                     onClick={() => openDetail(r)}
@@ -386,15 +593,34 @@ export default function EFilingPage() {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-900">{r.pcm.fullName}</p>
-                      <p className="font-mono text-xs text-slate-500">{r.pcm.callUpNumber}</p>
+                      <p className="font-mono text-xs text-slate-500">
+                        {r.pcm.callUpNumber}
+                        {r.pcm.stateCode ? ` · ${r.pcm.stateCode}` : ""}
+                      </p>
                       <p className="mt-0.5 text-xs text-slate-600">
-                        <span className="font-medium text-nysc-green">
-                          Camp exit · {groundLabel(r.ground, grounds)}
-                        </span>
-                        {" · "}
-                        {stageLabel(r.stage)}
-                        {" · "}
-                        {r.initiatedByName}
+                        {r.kind === "exit" ? (
+                          <>
+                            <span className="font-medium text-nysc-green">
+                              Camp exit · {groundLabel(r.ground, grounds)}
+                            </span>
+                            {" · "}
+                            {stageLabel(r.stage)}
+                            {" · "}
+                            {r.initiatedByName}
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium text-sky-800">
+                              {typeLabel(r.type)}
+                            </span>
+                            {r.subject ? ` · ${r.subject}` : ""}
+                            {" · "}
+                            {statusLabel(r.status)}
+                            {r.currentHolderName
+                              ? ` · with ${r.currentHolderName}`
+                              : ""}
+                          </>
+                        )}
                       </p>
                     </div>
                   </button>
@@ -428,15 +654,28 @@ export default function EFilingPage() {
                   alt={selected.pcm.fullName}
                   sizeClass="h-24 w-24"
                 />
-                <div>
+                <div className="min-w-0">
                   <h2 className="text-lg font-bold">{selected.pcm.fullName}</h2>
-                  <p className="font-mono text-sm text-slate-600">{selected.pcm.callUpNumber}</p>
-                  <p className="mt-2 text-xs font-semibold text-amber-900">
-                    {groundLabel(selected.ground, grounds)} · {stageLabel(selected.stage)}
+                  <p className="font-mono text-sm text-slate-600">
+                    {selected.pcm.callUpNumber}
                   </p>
+                  {selected.pcm.stateCode && (
+                    <p className="font-mono text-xs text-slate-500">
+                      {selected.pcm.stateCode}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs font-semibold text-amber-900">
+                    {selected.kind === "exit"
+                      ? `${groundLabel(selected.ground, grounds)} · ${stageLabel(selected.stage)}`
+                      : `${typeLabel(selected.type)} · ${statusLabel(selected.status)}`}
+                  </p>
+                  {selected.kind === "efile" && selected.subject && (
+                    <p className="mt-1 text-sm text-slate-700">{selected.subject}</p>
+                  )}
                 </div>
               </div>
             </div>
+
             <div className="space-y-4 p-5 text-sm">
               <section>
                 <h3 className="text-xs font-semibold uppercase text-slate-500">
@@ -448,16 +687,18 @@ export default function EFilingPage() {
                 <div className="mt-3 space-y-4">
                   {(selected.minutes?.length
                     ? selected.minutes
-                    : [
-                        {
-                          id: "legacy",
-                          fromName: selected.initiatedByName,
-                          toName: selected.nextAssigneeName,
-                          body: selected.reasonDetail || "File opened",
-                          action: "FORWARD",
-                          createdAt: selected.initiatedAt,
-                        } as Minute,
-                      ]
+                    : selected.kind === "exit"
+                      ? [
+                          {
+                            id: "legacy",
+                            fromName: selected.initiatedByName,
+                            toName: selected.nextAssigneeName,
+                            body: selected.reasonDetail || "File opened",
+                            action: "FORWARD",
+                            createdAt: selected.initiatedAt,
+                          } as Minute,
+                        ]
+                      : []
                   ).map((m) => (
                     <div
                       key={m.id}
@@ -480,7 +721,8 @@ export default function EFilingPage() {
                   ))}
                 </div>
               </section>
-              {selected.photoUrls?.length > 0 && (
+
+              {selected.kind === "exit" && selected.photoUrls?.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {selected.photoUrls.map((u, i) => (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -488,51 +730,134 @@ export default function EFilingPage() {
                   ))}
                 </div>
               )}
-              {canActOnStage(selected.stage, roles, perms) && (
-                <section className="space-y-3 border-t pt-4">
-                  <textarea
-                    rows={3}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Write your minute…"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                  {selected.stage !== "AWAITING_STATE_COORDINATOR" && (
-                    <select
+
+              {/* Exit actions */}
+              {selected.kind === "exit" &&
+                canActOnStage(selected.stage, roles, perms) && (
+                  <section className="space-y-3 border-t pt-4">
+                    <textarea
+                      rows={3}
                       className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                      value={actNextTo}
-                      onChange={(e) => setActNextTo(e.target.value)}
-                    >
-                      <option value="">Default next stage</option>
-                      {actOfficers.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.suggested ? "★ " : ""}
-                          {o.name}
-                          {o.roles[0] ? ` · ${o.roles[0]}` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => void decide("approve")}
-                      className="flex-1 rounded-md bg-nysc-green py-2.5 text-sm font-semibold text-white"
-                    >
-                      Recommend / Approve
-                    </button>
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => void decide("reject")}
-                      className="flex-1 rounded-md border border-red-300 bg-red-50 py-2.5 text-sm font-semibold text-red-700"
-                    >
-                      Return
-                    </button>
-                  </div>
-                </section>
-              )}
+                      placeholder="Write your minute…"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                    {selected.stage !== "AWAITING_STATE_COORDINATOR" && (
+                      <select
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                        value={actNextTo}
+                        onChange={(e) => setActNextTo(e.target.value)}
+                      >
+                        <option value="">Default next stage</option>
+                        {actOfficers.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.suggested ? "★ " : ""}
+                            {o.name}
+                            {o.roles[0] ? ` · ${o.roles[0]}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => void decideExit("approve")}
+                        className="flex-1 rounded-md bg-nysc-green py-2.5 text-sm font-semibold text-white"
+                      >
+                        Recommend / Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => void decideExit("reject")}
+                        className="flex-1 rounded-md border border-red-300 bg-red-50 py-2.5 text-sm font-semibold text-red-700"
+                      >
+                        Return
+                      </button>
+                    </div>
+                  </section>
+                )}
+
+              {/* Non-exit e-file actions */}
+              {selected.kind === "efile" &&
+                selected.canAct &&
+                ["DRAFT", "IN_TRANSIT", "PENDING"].includes(selected.status) && (
+                  <section className="space-y-3 border-t pt-4">
+                    <textarea
+                      rows={3}
+                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      placeholder="Write your minute…"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                    <div>
+                      <label className="text-xs font-semibold uppercase text-slate-500">
+                        Forward to (one or more)
+                      </label>
+                      <div className="mt-1 max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+                        {actOfficers.map((o) => {
+                          const checked = actNextIds.includes(o.id);
+                          return (
+                            <label
+                              key={o.id}
+                              className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-slate-50 ${
+                                checked ? "bg-emerald-50" : ""
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleNextOfficer(o.id)}
+                                className="h-4 w-4 rounded border-slate-300 text-nysc-green"
+                              />
+                              <span className="truncate">
+                                {o.name}
+                                {o.roles[0] ? (
+                                  <span className="text-slate-500"> · {o.roles[0]}</span>
+                                ) : null}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => void decideEfile("forward")}
+                        className="rounded-md bg-nysc-green py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                      >
+                        Forward
+                      </button>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => void decideEfile("approve")}
+                        className="rounded-md border border-emerald-300 bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-800"
+                      >
+                        Approve / Close
+                      </button>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => void decideEfile("return")}
+                        className="rounded-md border border-amber-300 bg-amber-50 py-2.5 text-sm font-semibold text-amber-900"
+                      >
+                        Return
+                      </button>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => void decideEfile("reject")}
+                        className="rounded-md border border-red-300 bg-red-50 py-2.5 text-sm font-semibold text-red-700"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </section>
+                )}
             </div>
           </aside>
         </div>
