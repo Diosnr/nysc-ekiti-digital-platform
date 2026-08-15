@@ -122,6 +122,9 @@ export default function EFilingPage() {
   const myStage = stageForRoles(roles);
   const canStart = me ? canInitiateExit(roles, perms) : false;
   const canCreateFile = me ? canAccessExitDesk(roles, perms) : false;
+  const isSuper =
+    perms.includes("*") ||
+    roles.some((r) => r.toLowerCase() === "super admin");
   const activeTab = tab ?? "my_queue";
 
   const loadList = useCallback(async () => {
@@ -132,10 +135,19 @@ export default function EFilingPage() {
       let url = "/api/exit-requests?bucket=pending";
       if (tab === "approved") url = "/api/exit-requests?bucket=approved";
       if (tab === "rejected") url = "/api/exit-requests?bucket=rejected";
-      if (tab === "my_queue" && myStage) url = `/api/exit-requests?stage=${myStage}`;
-      if (tab === "my_queue" && !myStage && canStart) url = "/api/exit-requests?mine=1";
-      if (tab === "my_queue" && !myStage && !canStart)
+      if (tab === "pending") url = "/api/exit-requests?bucket=pending";
+      // Role-specific queue (clinic / director / coordinator)
+      if (tab === "my_queue" && myStage) {
+        url = `/api/exit-requests?stage=${myStage}`;
+      }
+      // Platoon initiators: open filings they started (still pending only)
+      else if (tab === "my_queue" && canStart && !isSuper) {
+        url = "/api/exit-requests?mine=1";
+      }
+      // Super Admin / others without a stage: all still-open files
+      else if (tab === "my_queue") {
         url = "/api/exit-requests?bucket=pending";
+      }
       const res = await staffFetch(url);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -148,7 +160,7 @@ export default function EFilingPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, myStage, canStart]);
+  }, [tab, myStage, canStart, isSuper]);
 
   useEffect(() => {
     void loadList();
@@ -222,7 +234,11 @@ export default function EFilingPage() {
   const tabs: { id: Tab; label: string }[] = [
     {
       id: "my_queue",
-      label: myStage ? "Pending for me" : canStart ? "My filings" : "Pending for me",
+      label: myStage
+        ? "Pending for me"
+        : canStart && !isSuper
+          ? "My open filings"
+          : "Pending for me",
     },
     { id: "pending", label: "All pending" },
     { id: "approved", label: "Approved" },
@@ -259,7 +275,7 @@ export default function EFilingPage() {
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         {(
           [
-            ["my_queue", "Pending for me"],
+            ["my_queue", myStage ? "Pending for me" : canStart && !isSuper ? "My open filings" : "Pending for me"],
             ["approved", "Approved"],
             ["rejected", "Returned / rejected"],
           ] as const
