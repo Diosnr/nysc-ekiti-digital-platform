@@ -29,13 +29,15 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  roles          UserRole[]
-  auditLogs      AuditLog[]              @relation("AuditActor")
-  refreshTokens  RefreshToken[]
-  pcmsCreated    Pcm[]                   @relation("PcmCreatedBy")
-  platoonTenures PlatoonOfficerTenure[]
-  newsAuthored   NewsArticle[]           @relation("NewsAuthor")
-  announcementsAuthored Announcement[]   @relation("AnnouncementAuthor")
+  roles                     UserRole[]
+  auditLogs                 AuditLog[]              @relation("AuditActor")
+  refreshTokens             RefreshToken[]
+  pcmsCreated               Pcm[]                   @relation("PcmCreatedBy")
+  platoonTenures            PlatoonOfficerTenure[]
+  newsAuthored              NewsArticle[]           @relation("NewsAuthor")
+  announcementsAuthored     Announcement[]          @relation("AnnouncementAuthor")
+  electronicFilesOpened     ElectronicFile[]        @relation("FileOpenedBy")
+  minutesAuthored           MinuteSheet[]           @relation("MinuteFrom")
 
   @@index([lgaCode])
   @@index([zoneCode])
@@ -52,7 +54,7 @@ model PlatoonOfficerTenure {
   startedAt      DateTime  @default(now())
   endedAt        DateTime?
   assignedById   String?
-  assignedByName  String?
+  assignedByName String?
   note           String?
   createdAt      DateTime  @default(now())
 
@@ -224,12 +226,13 @@ model Pcm {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
-  verifications  VerificationRecord[]
-  familyStatuses PcmFamilyStatus[]
-  skillProfiles  PcmSkillProfile[]
-  ninRecords     PcmNinRecord[]
-  exitRequests   CampExitRequest[]
-  attendance     PlatoonAttendance[]
+  verifications    VerificationRecord[]
+  familyStatuses   PcmFamilyStatus[]
+  skillProfiles    PcmSkillProfile[]
+  ninRecords       PcmNinRecord[]
+  exitRequests     CampExitRequest[]
+  attendance       PlatoonAttendance[]
+  electronicFiles  ElectronicFile[]
 
   @@index([fullName])
   @@index([stateCode])
@@ -271,6 +274,8 @@ model CampExitRequest {
   initiatedById     String
   initiatedByName   String
   initiatedAt       DateTime       @default(now())
+  nextAssigneeId    String?
+  nextAssigneeName  String?
   clinicById        String?
   clinicByName      String?
   clinicAt          DateTime?
@@ -294,6 +299,7 @@ model CampExitRequest {
   @@index([stage])
   @@index([ground])
   @@index([initiatedAt])
+  @@index([nextAssigneeId])
 }
 
 model VerificationRecord {
@@ -445,7 +451,6 @@ model Announcement {
   @@index([published, publishedAt])
 }
 
-// Configurable grounds for camp-exit e-files (admin)
 model ExitGroundOption {
   id             String   @id @default(cuid())
   code           String   @unique
@@ -458,4 +463,80 @@ model ExitGroundOption {
 
   @@index([isActive])
   @@index([sortOrder])
+}
+
+// Electronic file movement spine (camp exit is type CAMP_EXIT)
+enum ElectronicFileType {
+  CAMP_EXIT
+  LEAVE
+  RELOCATION
+  GENERAL
+}
+
+enum ElectronicFileStatus {
+  DRAFT
+  IN_TRANSIT
+  PENDING
+  APPROVED
+  RETURNED
+  REJECTED
+  CLOSED
+}
+
+enum MinuteAction {
+  DRAFT
+  FORWARD
+  RETURN
+  REJECT
+  RECOMMEND
+  APPROVE
+}
+
+model ElectronicFile {
+  id                 String               @id @default(cuid())
+  pcmId              String
+  pcm                Pcm                  @relation(fields: [pcmId], references: [id], onDelete: Cascade)
+  type               ElectronicFileType   @default(GENERAL)
+  subject            String
+  priority           String               @default("NORMAL")
+  status             ElectronicFileStatus @default(DRAFT)
+  groundCode         String?
+  exitRequestId      String?
+  openedById         String?
+  openedBy           User?                @relation("FileOpenedBy", fields: [openedById], references: [id], onDelete: SetNull)
+  openedByName       String?
+  currentHolderId    String?
+  currentHolderName  String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  minutes MinuteSheet[]
+
+  @@index([pcmId])
+  @@index([type])
+  @@index([status])
+  @@index([currentHolderId])
+  @@index([exitRequestId])
+  @@index([createdAt])
+}
+
+model MinuteSheet {
+  id                 String       @id @default(cuid())
+  fileId             String
+  file               ElectronicFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  fromUserId         String?
+  fromUser           User?        @relation("MinuteFrom", fields: [fromUserId], references: [id], onDelete: SetNull)
+  fromName           String
+  toUserId           String?
+  toName             String?
+  ccJson             String?
+  body               String
+  action             MinuteAction @default(FORWARD)
+  attachmentUrlsJson String?
+  createdAt          DateTime     @default(now())
+
+  @@index([fileId])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([createdAt])
 }
