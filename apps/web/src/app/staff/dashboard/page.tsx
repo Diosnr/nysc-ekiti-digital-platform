@@ -16,6 +16,8 @@ type Overview = {
   generatedAt: string;
   strength: {
     onRoll: number;
+    corpsMembers: number;
+    prospectiveCorpsMembers: number;
     intakeComplete: number;
     presentInCamp: number;
     departed: number;
@@ -194,13 +196,19 @@ export default function StaffDashboardPage() {
                   <StatCard
                     label="On the roll"
                     value={overview.strength.onRoll}
-                    hint="Every corps member on file"
+                    hint="Every record on file"
                     accent="slate"
                   />
                   <StatCard
-                    label="Intake sealed"
-                    value={overview.strength.intakeComplete}
-                    hint="Verified / registered records"
+                    label="Corps members (CM)"
+                    value={overview.strength.corpsMembers ?? 0}
+                    hint="Have state code"
+                    accent="green"
+                  />
+                  <StatCard
+                    label="Prospective (PCM)"
+                    value={overview.strength.prospectiveCorpsMembers ?? 0}
+                    hint="No state code yet"
                     accent="sky"
                   />
                   <StatCard
@@ -208,12 +216,6 @@ export default function StaffDashboardPage() {
                     value={overview.strength.presentInCamp}
                     hint="Checked in and still in camp"
                     accent="green"
-                  />
-                  <StatCard
-                    label="Cleared the gate"
-                    value={overview.strength.departed}
-                    hint="Checked out or exited"
-                    accent="amber"
                   />
                 </div>
               </div>
@@ -298,10 +300,6 @@ export default function StaffDashboardPage() {
                       </dd>
                     </div>
                   </dl>
-                  <p className="mt-4 text-[11px] leading-relaxed text-slate-400">
-                    Clinic numbers today reflect medical exit reviews. Full visit logs will
-                    deepen this panel when the clinic module ships.
-                  </p>
                 </div>
               </div>
 
@@ -319,11 +317,11 @@ export default function StaffDashboardPage() {
                   accent="slate"
                 />
                 <Link
-                  href="/staff/pcm"
+                  href="/staff/pcm?kind=cm"
                   className="flex flex-col justify-center rounded-2xl border border-dashed border-nysc-green/40 bg-white p-5 text-center shadow-sm transition hover:border-nysc-green hover:bg-emerald-50/40"
                 >
-                  <p className="text-sm font-semibold text-nysc-green">Corps registry</p>
-                  <p className="mt-1 text-xs text-slate-500">Search the full roll</p>
+                  <p className="text-sm font-semibold text-nysc-green">CM Registry</p>
+                  <p className="mt-1 text-xs text-slate-500">Corps members with state code</p>
                 </Link>
               </div>
             </>
@@ -335,13 +333,22 @@ export default function StaffDashboardPage() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Shortcuts</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(isSuper || perms.includes("pcm:read")) && (
-            <Link
-              href="/staff/pcm"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
-            >
-              <p className="font-semibold text-slate-900">PCM Registry</p>
-              <p className="mt-1 text-sm text-slate-600">Search and open files</p>
-            </Link>
+            <>
+              <Link
+                href="/staff/pcm"
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+              >
+                <p className="font-semibold text-slate-900">PCM Registry</p>
+                <p className="mt-1 text-sm text-slate-600">No state code yet</p>
+              </Link>
+              <Link
+                href="/staff/pcm?kind=cm"
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+              >
+                <p className="font-semibold text-slate-900">CM Registry</p>
+                <p className="mt-1 text-sm text-slate-600">Corps members with state code</p>
+              </Link>
+            </>
           )}
           {(isSuper || perms.includes("camp:exeat") || executive) && (
             <Link
