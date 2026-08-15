@@ -33,6 +33,7 @@ const nav: NavItem[] = [
   { href: "/staff/pro", label: "Public Relations", perm: "news:manage", special: "pro" },
   { href: "/staff/security/checkin", label: "Security gate", perm: "security:checkin" },
   { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
+  { href: "/staff/pcm?kind=cm", label: "CM Registry", perm: "pcm:read" },
   {
     href: "/staff/registration",
     label: "Registration",
@@ -214,7 +215,9 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (n.special === "pro") return proDesk;
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
-      return ["/staff/security/checkin", "/staff/pcm"].includes(n.href);
+      return ["/staff/security/checkin", "/staff/pcm", "/staff/pcm?kind=cm"].includes(
+        n.href
+      );
     }
     return true;
   });
@@ -223,12 +226,19 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const createLinks = visible.filter((n) => n.group === "create");
 
   function NavLink({ item }: { item: NavItem }) {
+    const search =
+      typeof window !== "undefined" ? window.location.search : "";
+    const isCmNav = item.href.includes("kind=cm");
+    const isPcmNav = item.href === "/staff/pcm";
     const active =
-      item.href === "/staff/pcm"
-        ? pathname === "/staff/pcm" || pathname.startsWith("/staff/pcm/")
-        : item.href === "/staff/e-file"
-          ? pathname.startsWith("/staff/e-file") || pathname.startsWith("/staff/exit")
-          : pathname.startsWith(item.href);
+      isCmNav
+        ? pathname.startsWith("/staff/pcm") && search.includes("kind=cm")
+        : isPcmNav
+          ? pathname === "/staff/pcm" ||
+            (pathname.startsWith("/staff/pcm/") && !search.includes("kind=cm"))
+          : item.href === "/staff/e-file"
+            ? pathname.startsWith("/staff/e-file") || pathname.startsWith("/staff/exit")
+            : pathname.startsWith(item.href);
     return (
       <Link
         href={item.href}

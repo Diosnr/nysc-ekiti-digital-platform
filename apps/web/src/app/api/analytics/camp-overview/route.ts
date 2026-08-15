@@ -12,6 +12,14 @@ function isExecutive(roles: string[], permissions: string[]): boolean {
   );
 }
 
+/** CM = has state code; PCM = without state code */
+const cmWhere = {
+  AND: [{ stateCode: { not: null } }, { NOT: { stateCode: "" } }],
+};
+const pcmWhere = {
+  OR: [{ stateCode: null }, { stateCode: "" }],
+};
+
 export async function GET(req: Request) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
@@ -22,6 +30,8 @@ export async function GET(req: Request) {
 
   const [
     totalOnRoll,
+    cmCount,
+    pcmCount,
     verifiedOrRegistered,
     insideCamp,
     departed,
@@ -36,6 +46,8 @@ export async function GET(req: Request) {
     officersActive,
   ] = await Promise.all([
     prisma.pcm.count(),
+    prisma.pcm.count({ where: cmWhere }),
+    prisma.pcm.count({ where: pcmWhere }),
     prisma.pcm.count({
       where: { status: { in: ["VERIFIED", "REGISTERED", "MOBILISED"] } },
     }),
@@ -74,7 +86,6 @@ export async function GET(req: Request) {
         },
       },
     }),
-    // Medical exit cases that entered the clinic step (proxy until full EMR)
     prisma.campExitRequest.count({
       where: { ground: "MEDICAL" },
     }),
@@ -98,6 +109,8 @@ export async function GET(req: Request) {
     generatedAt: new Date().toISOString(),
     strength: {
       onRoll: totalOnRoll,
+      corpsMembers: cmCount,
+      prospectiveCorpsMembers: pcmCount,
       intakeComplete: verifiedOrRegistered,
       presentInCamp: insideCamp,
       departed,
