@@ -20,7 +20,6 @@ model User {
   post             String?
   lgaCode          String?
   zoneCode         String?
-  // Current platoon for Platoon Officer (1–10). Rotations close tenure rows.
   platoonCode      String?
   isActive         Boolean   @default(true)
   activationToken  String?
@@ -30,11 +29,13 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  roles         UserRole[]
-  auditLogs     AuditLog[]     @relation("AuditActor")
-  refreshTokens RefreshToken[]
-  pcmsCreated   Pcm[]          @relation("PcmCreatedBy")
+  roles          UserRole[]
+  auditLogs      AuditLog[]              @relation("AuditActor")
+  refreshTokens  RefreshToken[]
+  pcmsCreated    Pcm[]                   @relation("PcmCreatedBy")
   platoonTenures PlatoonOfficerTenure[]
+  newsAuthored   NewsArticle[]           @relation("NewsAuthor")
+  announcementsAuthored Announcement[]   @relation("AnnouncementAuthor")
 
   @@index([lgaCode])
   @@index([zoneCode])
@@ -42,19 +43,18 @@ model User {
   @@index([isActive])
 }
 
-// Audit trail of which officer covered which platoon over time (rotations)
 model PlatoonOfficerTenure {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platoonCode     String
-  officerName     String
-  startedAt       DateTime  @default(now())
-  endedAt         DateTime?
-  assignedById    String?
-  assignedByName  String?
-  note            String?
-  createdAt       DateTime  @default(now())
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platoonCode    String
+  officerName    String
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  assignedById   String?
+  assignedByName String?
+  note           String?
+  createdAt      DateTime  @default(now())
 
   @@index([userId])
   @@index([platoonCode])
@@ -224,12 +224,12 @@ model Pcm {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
-  verifications   VerificationRecord[]
-  familyStatuses  PcmFamilyStatus[]
-  skillProfiles   PcmSkillProfile[]
-  ninRecords      PcmNinRecord[]
-  exitRequests    CampExitRequest[]
-  attendance      PlatoonAttendance[]
+  verifications  VerificationRecord[]
+  familyStatuses PcmFamilyStatus[]
+  skillProfiles  PcmSkillProfile[]
+  ninRecords     PcmNinRecord[]
+  exitRequests   CampExitRequest[]
+  attendance     PlatoonAttendance[]
 
   @@index([fullName])
   @@index([stateCode])
@@ -410,4 +410,38 @@ model RegistrationImportJob {
 
   @@index([status])
   @@index([createdAt])
+}
+
+// Public content — managed by PRO
+model NewsArticle {
+  id          String    @id @default(cuid())
+  title       String
+  excerpt     String?
+  body        String
+  imageUrl    String?
+  published   Boolean   @default(true)
+  publishedAt DateTime  @default(now())
+  authorId    String?
+  author      User?     @relation("NewsAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([published, publishedAt])
+}
+
+model Announcement {
+  id          String    @id @default(cuid())
+  title       String
+  body        String
+  imageUrl    String?
+  published   Boolean   @default(true)
+  publishedAt DateTime  @default(now())
+  authorId    String?
+  author      User?     @relation("AnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([published, publishedAt])
 }
