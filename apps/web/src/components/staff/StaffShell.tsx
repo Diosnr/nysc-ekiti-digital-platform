@@ -23,7 +23,7 @@ type NavItem = {
   label: string;
   perm: string | null;
   group?: "create";
-  special?: "exit" | "platoon" | "pro" | "accommodation";
+  special?: "exit" | "platoon" | "pro" | "accommodation" | "registry";
 };
 
 const ShellCtx = createContext(false);
@@ -32,8 +32,18 @@ const nav: NavItem[] = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
   { href: "/staff/pro", label: "Public Relations", perm: "news:manage", special: "pro" },
   { href: "/staff/security/checkin", label: "Security gate", perm: "security:checkin" },
-  { href: "/staff/pcm?kind=pcm", label: "PCM Registry", perm: "pcm:read" },
-  { href: "/staff/pcm?kind=cm", label: "CM Registry", perm: "pcm:read" },
+  {
+    href: "/staff/pcm?kind=pcm",
+    label: "PCM Registry",
+    perm: "pcm:read",
+    special: "registry",
+  },
+  {
+    href: "/staff/pcm?kind=cm",
+    label: "CM Registry",
+    perm: "pcm:read",
+    special: "registry",
+  },
   {
     href: "/staff/accommodation",
     label: "Accommodation",
@@ -82,6 +92,30 @@ const nav: NavItem[] = [
 
 function isPlatoonRole(roles: string[]) {
   return roles.some((r) => r.toLowerCase().includes("platoon"));
+}
+
+function isAccommodationOnly(roles: string[], permissions: string[]) {
+  const isAcc =
+    roles.some((r) => r.toLowerCase().includes("accommodation")) ||
+    permissions.includes("accommodation:assign") ||
+    permissions.includes("hostel:manage");
+  if (!isAcc) return false;
+  if (permissions.includes("*")) return false;
+  if (roles.some((r) => r.toLowerCase() === "super admin")) return false;
+  // Pure accommodation desk: hide registry menus
+  const hasOps = roles.some((r) =>
+    [
+      "security officer",
+      "registration officer",
+      "state coordinator",
+      "camp director",
+      "platoon",
+      "clinic",
+      "bank account",
+      "pro",
+    ].some((k) => r.toLowerCase().includes(k))
+  );
+  return !hasOps;
 }
 
 function isProOnly(roles: string[], permissions: string[]) {
@@ -178,6 +212,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const isSuper =
     roles.some((r) => r.toLowerCase() === "super admin") || perms.includes("*");
   const proOnly = isProOnly(roles, perms);
+  const accOnly = isAccommodationOnly(roles, perms);
   const isRegistration =
     roles.includes("Registration Officer") ||
     perms.includes("registration:complete");
@@ -224,10 +259,23 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (proOnly) {
       return n.href === "/staff/pro";
     }
+    // Accommodation officer: Dashboard + Accommodation only
+    if (accOnly) {
+      return (
+        n.href === "/staff/dashboard" ||
+        n.href === "/staff/accommodation"
+      );
+    }
     if (n.special === "exit") return exitDesk;
     if (n.special === "platoon") return platoonDesk;
     if (n.special === "pro") return proDesk;
     if (n.special === "accommodation") return accommodationDesk;
+    if (n.special === "registry") {
+      // Explicitly hide registry from pure accommodation (already handled),
+      // still require pcm:read for everyone else
+      if (!can("pcm:read")) return false;
+      return true;
+    }
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
       return [
@@ -283,7 +331,13 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
           <div className="leading-tight">
             <div className="text-sm font-bold text-slate-900">NYSC Ekiti</div>
             <div className="text-[11px] text-slate-500">
-              {proOnly ? "PRO" : isSecurity && !isSuper ? "Security" : "Staff"}
+              {proOnly
+                ? "PRO"
+                : accOnly
+                  ? "Accommodation"
+                  : isSecurity && !isSuper
+                    ? "Security"
+                    : "Staff"}
             </div>
           </div>
         </div>

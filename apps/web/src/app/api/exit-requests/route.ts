@@ -7,6 +7,12 @@ import {
   canAccessExitDesk,
 } from "@/lib/exit-workflow";
 
+const PENDING_STAGES = [
+  "AWAITING_CLINIC",
+  "AWAITING_CAMP_DIRECTOR",
+  "AWAITING_STATE_COORDINATOR",
+] as const;
+
 export async function GET(req: Request) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
@@ -23,18 +29,18 @@ export async function GET(req: Request) {
   const where: Record<string, unknown> = {};
   if (stage) where.stage = stage;
   if (bucket === "approved") where.stage = "APPROVED";
-  if (bucket === "rejected") where.stage = "REJECTED";
+  if (bucket === "rejected") {
+    where.stage = { in: ["REJECTED", "CANCELLED"] };
+  }
   if (bucket === "pending") {
-    where.stage = {
-      in: [
-        "AWAITING_CLINIC",
-        "AWAITING_CAMP_DIRECTOR",
-        "AWAITING_STATE_COORDINATOR",
-      ],
-    };
+    where.stage = { in: [...PENDING_STAGES] };
   }
   if (mine) {
     where.initiatedById = auth.payload.sub;
+    // Never mix terminal files into "my filings / pending for me" via mine alone
+    if (!bucket && !stage) {
+      where.stage = { in: [...PENDING_STAGES] };
+    }
   }
 
   const rows = await prisma.campExitRequest.findMany({
@@ -142,7 +148,6 @@ export async function POST(req: Request) {
   if (!pcmId) return jsonError("pcmId required");
   if (!ground) return jsonError("ground required");
 
-  // Resolve from ExitGroundOption when table exists
   let requiresClinic: boolean | undefined;
   try {
     const opt = await prisma.exitGroundOption.findFirst({
@@ -168,13 +173,7 @@ export async function POST(req: Request) {
   const open = await prisma.campExitRequest.findFirst({
     where: {
       pcmId,
-      stage: {
-        in: [
-          "AWAITING_CLINIC",
-          "AWAITING_CAMP_DIRECTOR",
-          "AWAITING_STATE_COORDINATOR",
-        ],
-      },
+      stage: { in: [...PENDING_STAGES] },
     },
   });
   if (open) return jsonError("An open exit request already exists for this member", 409);
@@ -199,7 +198,6 @@ export async function POST(req: Request) {
     }
   }
 
-  // ground column may still be enum in DB — map custom codes to closest enum if needed
   const groundForDb = ["MARITAL", "MEDICAL", "TERRORISM"].includes(ground)
     ? ground
     : requiresClinic
@@ -240,7 +238,6 @@ export async function POST(req: Request) {
     },
   });
 
-  // Dual-write electronic file spine when table exists
   try {
     await prisma.electronicFile.create({
       data: {
