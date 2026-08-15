@@ -113,6 +113,16 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "camp:exeat",
     "report:view",
   ],
+  "Accommodation Officer": [
+    "dashboard:view",
+    "pcm:read",
+    "pcm:search",
+    "pcm:photo:view",
+    "accommodation:read",
+    "accommodation:assign",
+    "accommodation:change",
+    "hostel:manage",
+  ],
   "Platoon Officer": [
     "dashboard:view",
     "pcm:read",
