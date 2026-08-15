@@ -5,6 +5,8 @@ import { canAccessExitDesk } from "@/lib/exit-workflow";
 
 type Params = { params: Promise<{ id: string }> };
 
+type MinuteAction = "DRAFT" | "FORWARD" | "RETURN" | "REJECT" | "RECOMMEND" | "APPROVE";
+
 export async function GET(req: Request, { params }: Params) {
   const auth = await requireAuth(req);
   if (auth instanceof Response) return auth;
@@ -91,7 +93,6 @@ export async function PATCH(req: Request, { params }: Params) {
     return jsonError("File already closed", 400);
   }
 
-  // Holder or opener or super can act
   const isSuper =
     auth.payload.permissions.includes("*") ||
     auth.payload.roles.some((r) => r.toLowerCase().includes("super admin"));
@@ -121,7 +122,7 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   let status = file.status;
-  let action: "FORWARD" | "APPROVE" | "RETURN" | "REJECT" = "FORWARD";
+  let action: MinuteAction = "FORWARD";
   if (decision === "approve") {
     status = nextAssigneeId ? "IN_TRANSIT" : "APPROVED";
     action = nextAssigneeId ? "RECOMMEND" : "APPROVE";
