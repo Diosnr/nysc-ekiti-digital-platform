@@ -193,6 +193,11 @@ enum BedStatus {
   BLOCKED
 }
 
+enum ClinicEncounterStatus {
+  OPEN
+  CLOSED
+}
+
 model Hostel {
   id                String        @id @default(cuid())
   name              String
@@ -285,6 +290,7 @@ model Pcm {
   attendance       PlatoonAttendance[]
   electronicFiles  ElectronicFile[]
   bed              Bed?
+  clinicEncounters ClinicEncounter[]
 
   @@index([fullName])
   @@index([stateCode])
@@ -297,6 +303,71 @@ model Pcm {
   @@index([checkedOutAt])
   @@index([platoonCode])
   @@index([kitIssuedAt])
+}
+
+/// Classified clinical record — access restricted to camp:clinic holders only.
+model ClinicEncounter {
+  id                 String                 @id @default(cuid())
+  pcmId              String
+  pcm                Pcm                    @relation(fields: [pcmId], references: [id], onDelete: Cascade)
+  status             ClinicEncounterStatus  @default(OPEN)
+  chiefComplaint     String?
+  diagnosis          String?
+  doctorNote         String?
+  openedById         String?
+  openedByName       String?
+  openedAt           DateTime               @default(now())
+  attendedByDoctorId String?
+  attendedByDoctorName String?
+  attendedAt         DateTime?
+  closedById         String?
+  closedByName       String?
+  closedAt           DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  vitals ClinicVital[]
+  drugs  ClinicDrugDispense[]
+
+  @@index([pcmId])
+  @@index([status])
+  @@index([openedAt])
+}
+
+model ClinicVital {
+  id               String          @id @default(cuid())
+  encounterId      String
+  encounter        ClinicEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  recordedById     String?
+  recordedByName   String?
+  bpSystolic       Int?
+  bpDiastolic      Int?
+  pulse            Int?
+  temperatureC     Float?
+  respiratoryRate  Int?
+  weightKg         Float?
+  spo2             Int?
+  note             String?
+  recordedAt       DateTime        @default(now())
+
+  @@index([encounterId])
+  @@index([recordedAt])
+}
+
+model ClinicDrugDispense {
+  id               String          @id @default(cuid())
+  encounterId      String
+  encounter        ClinicEncounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  drugName         String
+  dose             String?
+  quantity         String?
+  instructions     String?
+  dispensedById    String?
+  dispensedByName  String?
+  dispensedAt      DateTime        @default(now())
+
+  @@index([encounterId])
+  @@index([dispensedAt])
 }
 
 model PlatoonAttendance {
