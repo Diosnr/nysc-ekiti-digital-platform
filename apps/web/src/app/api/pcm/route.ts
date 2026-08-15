@@ -27,10 +27,11 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
   const callUp = (url.searchParams.get("callUp") || "").trim();
+  const cursor = (url.searchParams.get("cursor") || "").trim() || undefined;
+  const limit = Math.min(50, Math.max(10, Number(url.searchParams.get("limit")) || 30));
 
   const filters: Record<string, unknown>[] = [];
 
-  // Line platoon officers only see their platoon (Head of Platoon sees all)
   const isLinePlatoon =
     ctx &&
     isPlatoonOfficerRole(ctx.roles) &&
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
 
   if (isLinePlatoon) {
     if (!ctx.user.platoonCode) {
-      return jsonOk({ pcms: [], hint: "No platoon assigned to this officer" });
+      return jsonOk({ pcms: [], nextCursor: null, hasMore: false });
     }
     filters.push({ platoonCode: ctx.user.platoonCode });
   }
@@ -66,8 +67,14 @@ export async function GET(req: Request) {
 
   const pcms = await prisma.pcm.findMany({
     where,
-    orderBy: { createdAt: "desc" },
-    take: 50,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+    ...(cursor
+      ? {
+          cursor: { id: cursor },
+          skip: 1,
+        }
+      : {}),
     select: {
       id: true,
       callUpNumber: true,
@@ -84,8 +91,13 @@ export async function GET(req: Request) {
       platoonCode: true,
       kitIssuedAt: true,
       kitIssuedByName: true,
+      createdAt: true,
     },
   });
 
-  return jsonOk({ pcms });
+  const hasMore = pcms.length > limit;
+  const page = hasMore ? pcms.slice(0, limit) : pcms;
+  const nextCursor = hasMore ? page[page.length - 1]?.id ?? null : null;
+
+  return jsonOk({ pcms: page, nextCursor, hasMore, limit });
 }
