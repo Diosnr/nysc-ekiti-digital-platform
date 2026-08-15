@@ -100,6 +100,51 @@ export default function RegistrationCommitteePage() {
     URL.revokeObjectURL(url);
   }
 
+  /** Batched NYSC ID card → Cloudinary. Used after import and via button. */
+  async function runPhotoBackfill(opts?: { silent?: boolean }) {
+    if (!opts?.silent) {
+      setError(null);
+      setMsg(null);
+    }
+    setPhotoBusy(true);
+    let totalFilled = 0;
+    let remaining = 1;
+    let rounds = 0;
+    try {
+      while (remaining > 0 && rounds < 50) {
+        rounds++;
+        setImportProgress(`Fetching photos from NYSC… batch ${rounds}`);
+        const res = await staffFetch("/api/registration/backfill-photos", {
+          method: "POST",
+          body: JSON.stringify({ limit: 12 }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(data.error ?? "Photo backfill failed");
+          break;
+        }
+        totalFilled += data.filled ?? 0;
+        remaining = data.remaining ?? 0;
+        setMsg(
+          `Photos: +${data.filled} this batch · ${totalFilled} filled · ${remaining} still missing`
+        );
+        if ((data.processed ?? 0) === 0) break;
+      }
+      if (remaining === 0) {
+        setMsg(
+          totalFilled > 0
+            ? `Photo backfill finished · ${totalFilled} photos on Cloudinary`
+            : "No missing photos to fill"
+        );
+      }
+    } catch {
+      setError("Photo backfill network error");
+    } finally {
+      setPhotoBusy(false);
+      setImportProgress(null);
+    }
+  }
+
   async function onBulkFile(file: File | null) {
     if (!file) return;
     setError(null);
@@ -142,53 +187,17 @@ export default function RegistrationCommitteePage() {
         updated = data.job?.updatedCount ?? updated;
       }
       setMsg(
-        `Import complete · created ${created} · updated ${updated}. Photos are filled separately — use “Backfill photos”.`
+        `Import complete · created ${created} · updated ${updated}. Starting photo backfill…`
       );
       setImportProgress(null);
+      setImportBusy(false);
+      // Auto-start photo fill for rows without photographUrl
+      await runPhotoBackfill({ silent: true });
     } catch {
       setError("Could not read or upload CSV");
+      setImportBusy(false);
     } finally {
       setImportBusy(false);
-    }
-  }
-
-  /** Pull photos from NYSC ID card pages into Cloudinary (batched). */
-  async function backfillPhotos() {
-    setError(null);
-    setMsg(null);
-    setPhotoBusy(true);
-    let totalFilled = 0;
-    let remaining = 1;
-    let rounds = 0;
-    try {
-      while (remaining > 0 && rounds < 40) {
-        rounds++;
-        setImportProgress(`Fetching photos from NYSC… batch ${rounds}`);
-        const res = await staffFetch("/api/registration/backfill-photos", {
-          method: "POST",
-          body: JSON.stringify({ limit: 12 }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          setError(data.error ?? "Photo backfill failed");
-          break;
-        }
-        totalFilled += data.filled ?? 0;
-        remaining = data.remaining ?? 0;
-        setMsg(
-          `Photos: +${data.filled} this batch · ${totalFilled} total filled · ${remaining} still missing`
-        );
-        if ((data.processed ?? 0) === 0) break;
-      }
-      setImportProgress(null);
-      if (remaining === 0) {
-        setMsg(`Photo backfill finished · ${totalFilled} photos stored on Cloudinary`);
-      }
-    } catch {
-      setError("Photo backfill network error");
-    } finally {
-      setPhotoBusy(false);
-      setImportProgress(null);
     }
   }
 
@@ -283,7 +292,7 @@ export default function RegistrationCommitteePage() {
     <StaffShell>
       <h1 className="text-2xl font-bold text-slate-900">Registration Committee</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Exports, bulk CSV, and photo backfill from NYSC ID cards.
+        Bulk CSV auto-starts photo backfill when import finishes.
       </p>
 
       {error && (
@@ -322,7 +331,7 @@ export default function RegistrationCommitteePage() {
         <button
           type="button"
           disabled={photoBusy || importBusy}
-          onClick={() => void backfillPhotos()}
+          onClick={() => void runPhotoBackfill()}
           className="rounded-md border border-nysc-green bg-green-50 px-4 py-2 text-sm font-semibold text-nysc-green disabled:opacity-50"
         >
           {photoBusy ? "Fetching photos…" : "Backfill missing photos"}
@@ -332,15 +341,14 @@ export default function RegistrationCommitteePage() {
       <div className="mt-6 rounded-2xl border border-dashed border-nysc-green/40 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Bulk upload</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Upsert by call-up. Photos are not fetched during upload (too slow for large files).
-          After import, click <strong>Backfill missing photos</strong> — we open each NYSC ID
-          card page, pull the photo, store it on Cloudinary, and keep the original NYSC URL in
-          notes.
+          Upsert by call-up. When the last chunk finishes, photo backfill starts automatically
+          (NYSC ID card → Cloudinary). You can also run <strong>Backfill missing photos</strong>
+          anytime for leftovers.
         </p>
         <input
           type="file"
           accept=".csv,text/csv,.txt"
-          disabled={importBusy}
+          disabled={importBusy || photoBusy}
           className="mt-3 block w-full text-sm"
           onChange={(e) => void onBulkFile(e.target.files?.[0] ?? null)}
         />
