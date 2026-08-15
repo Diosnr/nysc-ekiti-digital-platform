@@ -1,12 +1,12 @@
 /** Camp exit grounds and approval chain helpers */
 
 export const EXIT_GROUNDS = [
-  { value: "MARITAL", label: "Marital grounds" },
-  { value: "MEDICAL", label: "Medical grounds" },
-  { value: "TERRORISM", label: "Terrorism grounds" },
+  { value: "MARITAL", label: "Marital grounds", requiresClinic: false },
+  { value: "MEDICAL", label: "Medical grounds", requiresClinic: true },
+  { value: "TERRORISM", label: "Terrorism grounds", requiresClinic: false },
 ] as const;
 
-export type ExitGround = (typeof EXIT_GROUNDS)[number]["value"];
+export type ExitGround = string;
 
 export type ExitStage =
   | "AWAITING_CLINIC"
@@ -26,7 +26,11 @@ export function isTerminalExitStage(stage: string): boolean {
   return TERMINAL_EXIT_STAGES.includes(stage as ExitStage);
 }
 
-export function groundLabel(g: string): string {
+export function groundLabel(g: string, catalog?: { code: string; label: string }[]): string {
+  if (catalog?.length) {
+    const hit = catalog.find((x) => x.code === g);
+    if (hit) return hit.label;
+  }
   return EXIT_GROUNDS.find((x) => x.value === g)?.label ?? g;
 }
 
@@ -42,8 +46,25 @@ export function stageLabel(s: string): string {
   return map[s] ?? s;
 }
 
-export function firstStageAfterInitiation(ground: ExitGround): ExitStage {
-  return ground === "MEDICAL" ? "AWAITING_CLINIC" : "AWAITING_CAMP_DIRECTOR";
+/** Default first stage: clinic if medical / requiresClinic, else director. */
+export function firstStageAfterInitiation(
+  ground: string,
+  requiresClinic?: boolean
+): ExitStage {
+  if (requiresClinic === true) return "AWAITING_CLINIC";
+  if (requiresClinic === false) return "AWAITING_CAMP_DIRECTOR";
+  if (ground === "MEDICAL") return "AWAITING_CLINIC";
+  return "AWAITING_CAMP_DIRECTOR";
+}
+
+/** Role keywords expected at each stage (for officer picker defaults). */
+export function roleHintsForStage(stage: ExitStage): string[] {
+  if (stage === "AWAITING_CLINIC") {
+    return ["head of clinic", "camp doctor", "camp nurse", "camp pharmacist"];
+  }
+  if (stage === "AWAITING_CAMP_DIRECTOR") return ["camp director"];
+  if (stage === "AWAITING_STATE_COORDINATOR") return ["state coordinator"];
+  return [];
 }
 
 export function stageForRoles(roles: string[]): ExitStage | null {
@@ -79,7 +100,6 @@ function isPlatoonRole(roles: string[]): boolean {
   );
 }
 
-/** Platoon officers (or camp:exit:initiate) may start an exit request. */
 export function canInitiateExit(roles: string[], permissions: string[]): boolean {
   if (permissions.includes("*") || permissions.includes("camp:exit:initiate")) {
     return true;
@@ -87,13 +107,14 @@ export function canInitiateExit(roles: string[], permissions: string[]): boolean
   return isPlatoonRole(roles);
 }
 
-/** Nav / page access to camp exit desk (initiate or approve). */
 export function canAccessExitDesk(roles: string[], permissions: string[]): boolean {
   if (
     permissions.includes("*") ||
     permissions.includes("camp:exeat") ||
     permissions.includes("camp:exit:initiate") ||
-    permissions.includes("camp:clinic")
+    permissions.includes("camp:clinic") ||
+    permissions.includes("file:create") ||
+    permissions.includes("file:forward")
   ) {
     return true;
   }
@@ -107,15 +128,15 @@ export function canAccessExitDesk(roles: string[], permissions: string[]): boole
         x.includes("camp doctor") ||
         x.includes("camp nurse") ||
         x.includes("camp pharmacist") ||
-        x.includes("head of clinic")
+        x.includes("head of clinic") ||
+        x.includes("lgi") ||
+        x.includes("zonal") ||
+        x.includes("head cim") ||
+        x.includes("registry")
     )
   );
 }
 
-/**
- * Who may Approve/Reject at the current open stage.
- * Never true for APPROVED / REJECTED / CANCELLED.
- */
 export function canActOnStage(
   stage: ExitStage,
   roles: string[],
@@ -150,7 +171,7 @@ export function canActOnStage(
 
 export function nextStageAfterApprove(
   current: ExitStage,
-  _ground: ExitGround
+  _ground?: string
 ): ExitStage {
   if (current === "AWAITING_CLINIC") return "AWAITING_CAMP_DIRECTOR";
   if (current === "AWAITING_CAMP_DIRECTOR") return "AWAITING_STATE_COORDINATOR";

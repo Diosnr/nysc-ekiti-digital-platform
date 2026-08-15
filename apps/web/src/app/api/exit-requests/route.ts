@@ -5,7 +5,6 @@ import {
   firstStageAfterInitiation,
   canInitiateExit,
   canAccessExitDesk,
-  type ExitGround,
 } from "@/lib/exit-workflow";
 
 export async function GET(req: Request) {
@@ -50,6 +49,8 @@ export async function GET(req: Request) {
       photoUrlsJson: true,
       initiatedByName: true,
       initiatedAt: true,
+      nextAssigneeId: true,
+      nextAssigneeName: true,
       clinicByName: true,
       clinicAt: true,
       clinicNote: true,
@@ -91,6 +92,8 @@ export async function GET(req: Request) {
         photoUrls: [] as string[],
         initiatedByName: r.initiatedByName,
         initiatedAt: r.initiatedAt,
+        nextAssigneeId: r.nextAssigneeId,
+        nextAssigneeName: r.nextAssigneeName,
         clinicByName: r.clinicByName,
         clinicAt: r.clinicAt,
         clinicNote: r.clinicNote,
@@ -129,15 +132,31 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const pcmId = String(body.pcmId ?? "");
-  const ground = String(body.ground ?? "").toUpperCase() as ExitGround;
+  const ground = String(body.ground ?? "").trim().toUpperCase();
   const reasonDetail = body.reasonDetail ? String(body.reasonDetail).trim() : null;
   const photoUrls: string[] = Array.isArray(body.photoUrls)
     ? body.photoUrls.map(String).filter(Boolean)
     : [];
+  const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
 
   if (!pcmId) return jsonError("pcmId required");
-  if (!["MARITAL", "MEDICAL", "TERRORISM"].includes(ground)) {
-    return jsonError("ground must be MARITAL, MEDICAL, or TERRORISM");
+  if (!ground) return jsonError("ground required");
+
+  // Resolve from ExitGroundOption when table exists
+  let requiresClinic: boolean | undefined;
+  try {
+    const opt = await prisma.exitGroundOption.findFirst({
+      where: { code: ground, isActive: true },
+    });
+    if (opt) requiresClinic = opt.requiresClinic;
+  } catch {
+    /* table missing until push */
+  }
+  if (requiresClinic === undefined) {
+    if (!["MARITAL", "MEDICAL", "TERRORISM"].includes(ground)) {
+      return jsonError("Unknown exit ground");
+    }
+    requiresClinic = ground === "MEDICAL";
   }
 
   const pcm = await prisma.pcm.findUnique({ where: { id: pcmId } });
@@ -165,23 +184,49 @@ export async function POST(req: Request) {
     select: { name: true, email: true },
   });
   const actorName = actor?.name?.trim() || actor?.email || auth.payload.email;
-  const stage = firstStageAfterInitiation(ground);
+  const stage = firstStageAfterInitiation(ground, requiresClinic);
+
+  let nextAssigneeId: string | null = null;
+  let nextAssigneeName: string | null = null;
+  if (nextToUserId) {
+    const next = await prisma.user.findFirst({
+      where: { id: nextToUserId, isActive: true },
+      select: { id: true, name: true, email: true },
+    });
+    if (next) {
+      nextAssigneeId = next.id;
+      nextAssigneeName = next.name?.trim() || next.email;
+    }
+  }
+
+  // ground column may still be enum in DB — map custom codes to closest enum if needed
+  const groundForDb = ["MARITAL", "MEDICAL", "TERRORISM"].includes(ground)
+    ? ground
+    : requiresClinic
+      ? "MEDICAL"
+      : "MARITAL";
 
   const row = await prisma.campExitRequest.create({
     data: {
       pcmId,
-      ground,
-      reasonDetail,
+      ground: groundForDb as "MARITAL" | "MEDICAL" | "TERRORISM",
+      reasonDetail:
+        ground !== groundForDb
+          ? `[${ground}] ${reasonDetail || ""}`.trim()
+          : reasonDetail,
       photoUrlsJson: photoUrls.length ? JSON.stringify(photoUrls) : null,
       stage,
       initiatedById: auth.payload.sub,
       initiatedByName: actorName,
+      nextAssigneeId,
+      nextAssigneeName,
     },
     select: {
       id: true,
       ground: true,
       stage: true,
       initiatedByName: true,
+      nextAssigneeName: true,
       pcm: { select: { id: true, callUpNumber: true, fullName: true } },
     },
   });
@@ -195,6 +240,38 @@ export async function POST(req: Request) {
     },
   });
 
+  // Dual-write electronic file spine when table exists
+  try {
+    await prisma.electronicFile.create({
+      data: {
+        pcmId,
+        type: "CAMP_EXIT",
+        subject: reasonDetail?.slice(0, 120) || `Camp exit · ${ground}`,
+        priority: "NORMAL",
+        status: "IN_TRANSIT",
+        groundCode: ground,
+        exitRequestId: row.id,
+        openedById: auth.payload.sub,
+        openedByName: actorName,
+        currentHolderId: nextAssigneeId,
+        currentHolderName: nextAssigneeName,
+        minutes: {
+          create: {
+            fromUserId: auth.payload.sub,
+            fromName: actorName,
+            toUserId: nextAssigneeId,
+            toName: nextAssigneeName,
+            body: reasonDetail || `Camp exit initiated on ${ground} grounds.`,
+            action: "FORWARD",
+            attachmentUrlsJson: photoUrls.length ? JSON.stringify(photoUrls) : null,
+          },
+        },
+      },
+    });
+  } catch {
+    /* ElectronicFile not migrated yet */
+  }
+
   const meta = clientMeta(req);
   await writeAudit({
     actorId: auth.payload.sub,
@@ -204,7 +281,12 @@ export async function POST(req: Request) {
     entityType: "CampExitRequest",
     entityId: row.id,
     pcmId,
-    after: { ground, stage, initiatedByName: actorName },
+    after: {
+      ground,
+      stage,
+      initiatedByName: actorName,
+      nextAssigneeName,
+    },
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
