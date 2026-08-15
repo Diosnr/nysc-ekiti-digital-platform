@@ -4,9 +4,11 @@ import { writeAudit } from "@/lib/audit";
 import {
   canActOnStage,
   nextStageAfterApprove,
+  roleHintsForStage,
   type ExitStage,
   type ExitGround,
 } from "@/lib/exit-workflow";
+import { appendExitMinute, listMinutesForExit } from "@/lib/efile-minutes";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -28,6 +30,8 @@ export async function GET(req: Request, { params }: Params) {
       initiatedById: true,
       initiatedByName: true,
       initiatedAt: true,
+      nextAssigneeId: true,
+      nextAssigneeName: true,
       clinicByName: true,
       clinicAt: true,
       clinicNote: true,
@@ -64,12 +68,16 @@ export async function GET(req: Request, { params }: Params) {
   const photoUrls =
     wantPhotos && row.photoUrlsJson ? safeJson(row.photoUrlsJson) : [];
 
+  const efile = await listMinutesForExit(id);
+
   return jsonOk({
     request: {
       ...row,
       photoUrlsJson: undefined,
       photoUrls,
       photoCount: row.photoUrlsJson ? countPhotos(row.photoUrlsJson) : photoUrls.length,
+      minutes: efile?.minutes ?? [],
+      efileStatus: efile?.status ?? null,
     },
   });
 }
@@ -100,6 +108,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const body = await req.json();
   const decision = String(body.decision ?? "").toLowerCase();
   const note = body.note ? String(body.note).trim() : null;
+  const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
 
   if (decision !== "approve" && decision !== "reject") {
     return jsonError("decision must be approve or reject");
@@ -124,6 +133,19 @@ export async function PATCH(req: Request, { params }: Params) {
   const actorName = actor?.name?.trim() || actor?.email || auth.payload.email;
   const now = new Date();
 
+  let nextAssigneeId: string | null = null;
+  let nextAssigneeName: string | null = null;
+  if (nextToUserId && decision === "approve") {
+    const next = await prisma.user.findFirst({
+      where: { id: nextToUserId, isActive: true },
+      select: { id: true, name: true, email: true },
+    });
+    if (next) {
+      nextAssigneeId = next.id;
+      nextAssigneeName = next.name?.trim() || next.email;
+    }
+  }
+
   if (decision === "reject") {
     const updated = await prisma.campExitRequest.update({
       where: { id },
@@ -133,10 +155,11 @@ export async function PATCH(req: Request, { params }: Params) {
         rejectedByName: actorName,
         rejectedAt: now,
         rejectReason: note,
+        nextAssigneeId: null,
+        nextAssigneeName: null,
       },
     });
 
-    // Member stays in camp; no security checkout; clear any grant stamp
     const pcm = await prisma.pcm.findUnique({ where: { id: row.pcmId } });
     await prisma.pcm.update({
       where: { id: row.pcmId },
@@ -150,6 +173,18 @@ export async function PATCH(req: Request, { params }: Params) {
             ? "CAMP_ACTIVE"
             : pcm?.status ?? "CAMP_ACTIVE",
       },
+    });
+
+    await appendExitMinute({
+      exitRequestId: id,
+      pcmId: row.pcmId,
+      fromUserId: auth.payload.sub,
+      fromName: actorName,
+      toUserId: row.initiatedById,
+      toName: row.initiatedByName,
+      body: note || "File returned / rejected.",
+      action: "RETURN",
+      fileStatus: "RETURNED",
     });
 
     const meta = clientMeta(req);
@@ -170,7 +205,11 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   const next = nextStageAfterApprove(stage, row.ground as ExitGround);
-  const data: Record<string, unknown> = { stage: next };
+  const data: Record<string, unknown> = {
+    stage: next,
+    nextAssigneeId: next === "APPROVED" ? null : nextAssigneeId,
+    nextAssigneeName: next === "APPROVED" ? null : nextAssigneeName,
+  };
 
   if (stage === "AWAITING_CLINIC") {
     data.clinicById = auth.payload.sub;
@@ -206,6 +245,32 @@ export async function PATCH(req: Request, { params }: Params) {
     });
   }
 
+  const action =
+    next === "APPROVED" ? "APPROVE" : stage === "AWAITING_CLINIC" ? "RECOMMEND" : "FORWARD";
+
+  // Default TO label for next stage if no person picked
+  let toName = nextAssigneeName;
+  if (!toName && next !== "APPROVED") {
+    const hints = roleHintsForStage(next);
+    toName = hints[0] ? hints[0].replace(/\b\w/g, (c) => c.toUpperCase()) : next;
+  }
+
+  await appendExitMinute({
+    exitRequestId: id,
+    pcmId: row.pcmId,
+    fromUserId: auth.payload.sub,
+    fromName: actorName,
+    toUserId: nextAssigneeId,
+    toName: next === "APPROVED" ? row.initiatedByName : toName,
+    body:
+      note ||
+      (next === "APPROVED"
+        ? "Approved. Exit granted by State Coordinator."
+        : `Recommended / forwarded to ${toName || "next stage"}.`),
+    action,
+    fileStatus: next === "APPROVED" ? "APPROVED" : "IN_TRANSIT",
+  });
+
   const meta = clientMeta(req);
   await writeAudit({
     actorId: auth.payload.sub,
@@ -215,7 +280,13 @@ export async function PATCH(req: Request, { params }: Params) {
     entityType: "CampExitRequest",
     entityId: id,
     pcmId: row.pcmId,
-    after: { approvedByName: actorName, from: stage, to: next, note },
+    after: {
+      approvedByName: actorName,
+      from: stage,
+      to: next,
+      note,
+      nextAssigneeName,
+    },
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
