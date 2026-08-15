@@ -45,8 +45,8 @@ const nav: NavItem[] = [
     special: "platoon",
   },
   {
-    href: "/staff/exit",
-    label: "Camp exit",
+    href: "/staff/e-file",
+    label: "E-File",
     perm: "camp:exeat",
     special: "exit",
   },
@@ -60,6 +60,12 @@ const nav: NavItem[] = [
     href: "/staff/admin/communities",
     label: "Communities",
     perm: "community:manage",
+    group: "create",
+  },
+  {
+    href: "/staff/admin/exit-grounds",
+    label: "Exit grounds",
+    perm: "user:create",
     group: "create",
   },
   { href: "/staff/admin/users", label: "Users", perm: "user:read" },
@@ -81,7 +87,6 @@ function isProOnly(roles: string[], permissions: string[]) {
   if (!isPro) return false;
   if (permissions.includes("*")) return false;
   if (roles.some((r) => r.toLowerCase() === "super admin")) return false;
-  // PRO-only if they don't hold camp/ops roles
   const ops = roles.some((r) =>
     [
       "security officer",
@@ -193,6 +198,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (p === "camp:exeat" && exitDesk) return true;
     if (p === "platoon:attendance" && platoonDesk) return true;
     if (p === "news:manage" && proDesk) return true;
+    if (p === "user:create" && isSuper) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
     }
@@ -220,7 +226,9 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     const active =
       item.href === "/staff/pcm"
         ? pathname === "/staff/pcm" || pathname.startsWith("/staff/pcm/")
-        : pathname.startsWith(item.href);
+        : item.href === "/staff/e-file"
+          ? pathname.startsWith("/staff/e-file") || pathname.startsWith("/staff/exit")
+          : pathname.startsWith(item.href);
     return (
       <Link
         href={item.href}
