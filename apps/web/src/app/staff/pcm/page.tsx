@@ -56,7 +56,11 @@ type Pcm = {
 export default function PcmRegistryPage() {
   const searchParams = useSearchParams();
   const kindParam = (searchParams.get("kind") || "").toLowerCase();
-  const kind = kindParam === "cm" || kindParam === "pcm" ? kindParam : "";
+  // Default: PCM only (no state code). Use kind=all for full roll, kind=cm for CMs.
+  const kind =
+    kindParam === "cm" || kindParam === "all"
+      ? kindParam
+      : "pcm";
 
   const [pcms, setPcms] = useState<Pcm[]>([]);
   const [q, setQ] = useState("");
@@ -76,15 +80,15 @@ export default function PcmRegistryPage() {
   const title =
     kind === "cm"
       ? "CM Registry"
-      : kind === "pcm"
-        ? "PCM Registry"
-        : "PCM / CM Registry";
+      : kind === "all"
+        ? "PCM / CM Registry"
+        : "PCM Registry";
   const subtitle =
     kind === "cm"
       ? "Corps members with a state code · scroll to load more · click a name for details."
-      : kind === "pcm"
-        ? "Prospective corps members without a state code · scroll to load more."
-        : "All records · CM = has state code · PCM = without state code.";
+      : kind === "all"
+        ? "All records · CM = has state code · PCM = without state code."
+        : "Prospective corps members without a state code · scroll to load more.";
 
   const load = useCallback(
     async (search?: string, cursor?: string | null, append = false) => {
@@ -94,7 +98,7 @@ export default function PcmRegistryPage() {
       const params = new URLSearchParams();
       if (search) params.set("q", search);
       if (cursor) params.set("cursor", cursor);
-      if (kind) params.set("kind", kind);
+      if (kind === "cm" || kind === "pcm") params.set("kind", kind);
       params.set("limit", "30");
       try {
         const res = await staffFetch(`/api/pcm?${params.toString()}`);
@@ -193,9 +197,9 @@ export default function PcmRegistryPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            href="/staff/pcm"
+            href="/staff/pcm?kind=all"
             className={`rounded-md px-3 py-2 text-sm font-medium ${
-              !kind
+              kind === "all"
                 ? "bg-nysc-green text-white"
                 : "border border-slate-300 bg-white text-slate-700"
             }`}
