@@ -48,6 +48,7 @@ export default function RegistrationCommitteePage() {
 
   const [importProgress, setImportProgress] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -141,13 +142,53 @@ export default function RegistrationCommitteePage() {
         updated = data.job?.updatedCount ?? updated;
       }
       setMsg(
-        `Import complete · created ${created} · updated ${updated} · ${rows.length} rows processed`
+        `Import complete · created ${created} · updated ${updated}. Photos are filled separately — use “Backfill photos”.`
       );
       setImportProgress(null);
     } catch {
       setError("Could not read or upload CSV");
     } finally {
       setImportBusy(false);
+    }
+  }
+
+  /** Pull photos from NYSC ID card pages into Cloudinary (batched). */
+  async function backfillPhotos() {
+    setError(null);
+    setMsg(null);
+    setPhotoBusy(true);
+    let totalFilled = 0;
+    let remaining = 1;
+    let rounds = 0;
+    try {
+      while (remaining > 0 && rounds < 40) {
+        rounds++;
+        setImportProgress(`Fetching photos from NYSC… batch ${rounds}`);
+        const res = await staffFetch("/api/registration/backfill-photos", {
+          method: "POST",
+          body: JSON.stringify({ limit: 12 }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(data.error ?? "Photo backfill failed");
+          break;
+        }
+        totalFilled += data.filled ?? 0;
+        remaining = data.remaining ?? 0;
+        setMsg(
+          `Photos: +${data.filled} this batch · ${totalFilled} total filled · ${remaining} still missing`
+        );
+        if ((data.processed ?? 0) === 0) break;
+      }
+      setImportProgress(null);
+      if (remaining === 0) {
+        setMsg(`Photo backfill finished · ${totalFilled} photos stored on Cloudinary`);
+      }
+    } catch {
+      setError("Photo backfill network error");
+    } finally {
+      setPhotoBusy(false);
+      setImportProgress(null);
     }
   }
 
@@ -242,7 +283,7 @@ export default function RegistrationCommitteePage() {
     <StaffShell>
       <h1 className="text-2xl font-bold text-slate-900">Registration Committee</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Exports, single-record PPA/LGI/ZI capture, and bulk CSV upsert for large rolls.
+        Exports, bulk CSV, and photo backfill from NYSC ID cards.
       </p>
 
       {error && (
@@ -278,18 +319,27 @@ export default function RegistrationCommitteePage() {
         >
           Bulk template
         </button>
+        <button
+          type="button"
+          disabled={photoBusy || importBusy}
+          onClick={() => void backfillPhotos()}
+          className="rounded-md border border-nysc-green bg-green-50 px-4 py-2 text-sm font-semibold text-nysc-green disabled:opacity-50"
+        >
+          {photoBusy ? "Fetching photos…" : "Backfill missing photos"}
+        </button>
       </div>
 
       <div className="mt-6 rounded-2xl border border-dashed border-nysc-green/40 bg-white p-5">
         <h2 className="font-semibold text-slate-900">Bulk upload</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Upsert by call-up number. Existing records: fill empty identity fields; apply
-          registration columns when present. New rows need callUpNumber + fullName. Chunked
-          for large files (100k+).
+          Upsert by call-up. Photos are not fetched during upload (too slow for large files).
+          After import, click <strong>Backfill missing photos</strong> — we open each NYSC ID
+          card page, pull the photo, store it on Cloudinary, and keep the original NYSC URL in
+          notes.
         </p>
         <input
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,text/csv,.txt"
           disabled={importBusy}
           className="mt-3 block w-full text-sm"
           onChange={(e) => void onBulkFile(e.target.files?.[0] ?? null)}
