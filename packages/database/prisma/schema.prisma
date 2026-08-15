@@ -466,11 +466,19 @@ model ExitGroundOption {
 }
 
 // Electronic file movement spine (camp exit is type CAMP_EXIT)
+// CM = has stateCode; PCM = no stateCode (business rule)
 enum ElectronicFileType {
   CAMP_EXIT
   LEAVE
+  SICK_LEAVE
+  CASUAL_LEAVE
+  MATERNITY_LEAVE
+  CONVOCATION_LEAVE
   RELOCATION
+  REPOSTING
   GENERAL
+  QUERY
+  OTHERS
 }
 
 enum ElectronicFileStatus {

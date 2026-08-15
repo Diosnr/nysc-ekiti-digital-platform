@@ -27,6 +27,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
   const callUp = (url.searchParams.get("callUp") || "").trim();
+  const kind = (url.searchParams.get("kind") || "").trim().toLowerCase();
   const cursor = (url.searchParams.get("cursor") || "").trim() || undefined;
   const limit = Math.min(50, Math.max(10, Number(url.searchParams.get("limit")) || 30));
 
@@ -43,6 +44,16 @@ export async function GET(req: Request) {
       return jsonOk({ pcms: [], nextCursor: null, hasMore: false });
     }
     filters.push({ platoonCode: ctx.user.platoonCode });
+  }
+
+  // Business rule: CM = has state code; PCM = without state code
+  if (kind === "cm") {
+    filters.push({ stateCode: { not: null } });
+    filters.push({ NOT: { stateCode: "" } });
+  } else if (kind === "pcm") {
+    filters.push({
+      OR: [{ stateCode: null }, { stateCode: "" }],
+    });
   }
 
   if (q || callUp) {
@@ -81,14 +92,19 @@ export async function GET(req: Request) {
       fullName: true,
       gender: true,
       institution: true,
+      course: true,
       status: true,
       deploymentState: true,
       photographUrl: true,
       campAddress: true,
       dateReporting: true,
       batchYear: true,
+      stream: true,
+      originState: true,
       stateCode: true,
       platoonCode: true,
+      ppaName: true,
+      ppaAddress: true,
       kitIssuedAt: true,
       kitIssuedByName: true,
       createdAt: true,
@@ -99,5 +115,5 @@ export async function GET(req: Request) {
   const page = hasMore ? pcms.slice(0, limit) : pcms;
   const nextCursor = hasMore ? page[page.length - 1]?.id ?? null : null;
 
-  return jsonOk({ pcms: page, nextCursor, hasMore, limit });
+  return jsonOk({ pcms: page, nextCursor, hasMore, limit, kind: kind || "all" });
 }
