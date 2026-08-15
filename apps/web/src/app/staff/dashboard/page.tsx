@@ -38,6 +38,24 @@ type Overview = {
   operations: { activeOfficers: number };
 };
 
+type AccSummary = {
+  hostels: number;
+  beds: number;
+  vacant: number;
+  occupied: number;
+  blocked: number;
+};
+
+type AccHostel = {
+  id: string;
+  name: string;
+  genderRestriction: string;
+  vacant: number;
+  occupied: number;
+  bedCount: number;
+  isActive: boolean;
+};
+
 function isExecutive(roles: string[], permissions: string[]) {
   if (permissions.includes("*")) return true;
   const r = roles.map((x) => x.toLowerCase());
@@ -46,6 +64,17 @@ function isExecutive(roles: string[], permissions: string[]) {
       x.includes("super admin") ||
       x.includes("state coordinator") ||
       x.includes("camp director")
+  );
+}
+
+function isAccommodationOfficer(roles: string[], permissions: string[]) {
+  if (permissions.includes("*")) return false;
+  if (roles.some((r) => r.toLowerCase() === "super admin")) return false;
+  return (
+    roles.some((r) => r.toLowerCase().includes("accommodation")) ||
+    permissions.includes("accommodation:assign") ||
+    permissions.includes("hostel:manage") ||
+    permissions.includes("accommodation:read")
   );
 }
 
@@ -99,6 +128,9 @@ export default function StaffDashboardPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [ovLoading, setOvLoading] = useState(false);
+  const [accSummary, setAccSummary] = useState<AccSummary | null>(null);
+  const [accHostels, setAccHostels] = useState<AccHostel[]>([]);
+  const [accLoading, setAccLoading] = useState(false);
 
   useEffect(() => {
     staffFetch("/api/auth/me").then(async (res) => {
@@ -106,13 +138,14 @@ export default function StaffDashboardPage() {
       const data = (await res.json()) as Me;
       setMe(data);
       const roles = data.roles ?? [];
+      const perms = data.permissions ?? [];
       const isSecurity =
         roles.includes("Security Officer") && !roles.includes("Super Admin");
       if (isSecurity) {
         router.replace("/staff/security/checkin");
         return;
       }
-      if (isExecutive(roles, data.permissions ?? [])) {
+      if (isExecutive(roles, perms)) {
         setOvLoading(true);
         staffFetch("/api/analytics/camp-overview")
           .then(async (r) => {
@@ -120,6 +153,19 @@ export default function StaffDashboardPage() {
             setOverview(await r.json());
           })
           .finally(() => setOvLoading(false));
+      }
+      if (isAccommodationOfficer(roles, perms) || isExecutive(roles, perms)) {
+        setAccLoading(true);
+        staffFetch("/api/accommodation/hostels")
+          .then(async (r) => {
+            if (!r.ok) return;
+            const d = await r.json();
+            setAccSummary(d.summary ?? null);
+            setAccHostels(
+              ((d.hostels ?? []) as AccHostel[]).filter((h) => h.isActive !== false)
+            );
+          })
+          .finally(() => setAccLoading(false));
       }
     });
   }, [router]);
@@ -155,14 +201,23 @@ export default function StaffDashboardPage() {
     me.roles.some((r) => r.toLowerCase() === "super admin") ||
     perms.includes("*");
   const executive = isExecutive(me.roles, perms);
+  const accOfficer = isAccommodationOfficer(me.roles, perms);
   const g = overview?.departures.byGround;
+  const occupancyPct =
+    accSummary && accSummary.beds > 0
+      ? Math.round((accSummary.occupied / accSummary.beds) * 100)
+      : 0;
 
   return (
     <StaffShell>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {executive ? "Camp command overview" : "Welcome"}
+            {accOfficer && !executive
+              ? "Accommodation overview"
+              : executive
+                ? "Camp command overview"
+                : "Welcome"}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
             {me.user.name || me.user.email}
@@ -177,6 +232,107 @@ export default function StaffDashboardPage() {
           </p>
         )}
       </div>
+
+      {/* Accommodation at-a-glance (Accommodation Officer primary view) */}
+      {accOfficer && (
+        <section className="mt-8 space-y-5">
+          {accLoading && !accSummary ? (
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-200" />
+              ))}
+            </div>
+          ) : accSummary ? (
+            <>
+              <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+                <StatCard
+                  label="Hostels"
+                  value={accSummary.hostels}
+                  hint="Active facilities"
+                  accent="slate"
+                />
+                <StatCard
+                  label="Total beds"
+                  value={accSummary.beds}
+                  hint={`${occupancyPct}% occupied"`}
+                  accent="sky"
+                />
+                <StatCard
+                  label="Vacant"
+                  value={accSummary.vacant}
+                  hint="Ready to assign"
+                  accent="green"
+                />
+                <StatCard
+                  label="Occupied"
+                  value={accSummary.occupied}
+                  hint={accSummary.blocked ? `${accSummary.blocked} blocked` : "Currently housed"}
+                  accent="amber"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                    Hostels at a glance
+                  </h2>
+                  <Link
+                    href="/staff/accommodation"
+                    className="text-sm font-semibold text-nysc-green hover:underline"
+                  >
+                    Open allocation desk →
+                  </Link>
+                </div>
+                {accHostels.length === 0 ? (
+                  <p className="mt-4 text-sm text-slate-500">
+                    No hostels yet. Open the desk to create one.
+                  </p>
+                ) : (
+                  <ul className="mt-4 space-y-3">
+                    {accHostels.map((h) => {
+                      const total = h.bedCount || 1;
+                      const pct = Math.min(100, Math.round((h.occupied / total) * 100));
+                      return (
+                        <li key={h.id}>
+                          <div className="flex items-center justify-between gap-2 text-sm">
+                            <span className="font-medium text-slate-900">{h.name}</span>
+                            <span className="text-xs text-slate-500">
+                              {h.genderRestriction} · {h.occupied}/{total}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className="h-full rounded-full bg-nysc-green transition-all"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              <Link
+                href="/staff/accommodation"
+                className="flex items-center justify-center gap-2 rounded-2xl bg-nysc-green px-5 py-3.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                Go to bed allocation
+              </Link>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
+              <p className="text-sm text-slate-600">Could not load accommodation stats.</p>
+              <Link
+                href="/staff/accommodation"
+                className="mt-3 inline-block text-sm font-semibold text-nysc-green"
+              >
+                Open accommodation →
+              </Link>
+            </div>
+          )}
+        </section>
+      )}
 
       {executive && (
         <section className="mt-8 space-y-6">
@@ -257,10 +413,10 @@ export default function StaffDashboardPage() {
                     </div>
                   </div>
                   <Link
-                    href="/staff/exit"
+                    href="/staff/e-file"
                     className="mt-4 inline-block text-sm font-medium text-nysc-green hover:underline"
                   >
-                    Open exit desk →
+                    Open e-file desk →
                   </Link>
                 </div>
 
@@ -329,65 +485,79 @@ export default function StaffDashboardPage() {
         </section>
       )}
 
-      <div className="mt-10">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Shortcuts</h2>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {(isSuper || perms.includes("pcm:read")) && (
-            <>
+      {/* Shortcuts — hidden for pure Accommodation Officer */}
+      {!accOfficer && (
+        <div className="mt-10">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Shortcuts
+          </h2>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {(isSuper || perms.includes("pcm:read")) && (
+              <>
+                <Link
+                  href="/staff/pcm?kind=pcm"
+                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+                >
+                  <p className="font-semibold text-slate-900">PCM Registry</p>
+                  <p className="mt-1 text-sm text-slate-600">No state code yet</p>
+                </Link>
+                <Link
+                  href="/staff/pcm?kind=cm"
+                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+                >
+                  <p className="font-semibold text-slate-900">CM Registry</p>
+                  <p className="mt-1 text-sm text-slate-600">Corps members with state code</p>
+                </Link>
+              </>
+            )}
+            {(isSuper || perms.includes("camp:exeat") || executive) && (
               <Link
-                href="/staff/pcm"
+                href="/staff/e-file"
                 className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
               >
-                <p className="font-semibold text-slate-900">PCM Registry</p>
-                <p className="mt-1 text-sm text-slate-600">No state code yet</p>
+                <p className="font-semibold text-slate-900">E-File</p>
+                <p className="mt-1 text-sm text-slate-600">Queues and approvals</p>
               </Link>
+            )}
+            {(isSuper || perms.includes("security:checkin")) && (
               <Link
-                href="/staff/pcm?kind=cm"
+                href="/staff/security/checkin"
                 className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
               >
-                <p className="font-semibold text-slate-900">CM Registry</p>
-                <p className="mt-1 text-sm text-slate-600">Corps members with state code</p>
+                <p className="font-semibold text-slate-900">Security gate</p>
+                <p className="mt-1 text-sm text-slate-600">Check-in and check-out</p>
               </Link>
-            </>
-          )}
-          {(isSuper || perms.includes("camp:exeat") || executive) && (
-            <Link
-              href="/staff/exit"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
-            >
-              <p className="font-semibold text-slate-900">Camp exit</p>
-              <p className="mt-1 text-sm text-slate-600">Queues and approvals</p>
-            </Link>
-          )}
-          {(isSuper || perms.includes("security:checkin")) && (
-            <Link
-              href="/staff/security/checkin"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
-            >
-              <p className="font-semibold text-slate-900">Security gate</p>
-              <p className="mt-1 text-sm text-slate-600">Check-in and check-out</p>
-            </Link>
-          )}
-          {(isSuper || perms.includes("registration:complete")) && (
-            <Link
-              href="/staff/registration"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
-            >
-              <p className="font-semibold text-slate-900">Registration</p>
-              <p className="mt-1 text-sm text-slate-600">Exports and PPA / LGI / ZI</p>
-            </Link>
-          )}
-          {(isSuper || perms.includes("user:read")) && (
-            <Link
-              href="/staff/admin/users"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
-            >
-              <p className="font-semibold text-slate-900">Users</p>
-              <p className="mt-1 text-sm text-slate-600">Officers and activation</p>
-            </Link>
-          )}
+            )}
+            {(isSuper || perms.includes("registration:complete")) && (
+              <Link
+                href="/staff/registration"
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+              >
+                <p className="font-semibold text-slate-900">Registration</p>
+                <p className="mt-1 text-sm text-slate-600">Exports and PPA / LGI / ZI</p>
+              </Link>
+            )}
+            {(isSuper || perms.includes("user:read")) && (
+              <Link
+                href="/staff/admin/users"
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+              >
+                <p className="font-semibold text-slate-900">Users</p>
+                <p className="mt-1 text-sm text-slate-600">Officers and activation</p>
+              </Link>
+            )}
+            {(isSuper || perms.includes("accommodation:read")) && (
+              <Link
+                href="/staff/accommodation"
+                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
+              >
+                <p className="font-semibold text-slate-900">Accommodation</p>
+                <p className="mt-1 text-sm text-slate-600">Hostels and bed allocation</p>
+              </Link>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </StaffShell>
   );
 }
