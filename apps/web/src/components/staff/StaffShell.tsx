@@ -11,6 +11,7 @@ import {
 } from "react";
 import { clearTokens, getAccessToken, staffFetch } from "@/lib/staff-api";
 import { canAccessExitDesk } from "@/lib/exit-workflow";
+import { hasClinicAccess, isClinicOnly } from "@/lib/clinic-access";
 
 type Me = {
   user: { name: string | null; email: string };
@@ -23,7 +24,7 @@ type NavItem = {
   label: string;
   perm: string | null;
   group?: "create";
-  special?: "exit" | "platoon" | "pro" | "accommodation" | "registry";
+  special?: "exit" | "platoon" | "pro" | "accommodation" | "registry" | "clinic";
 };
 
 const ShellCtx = createContext(false);
@@ -33,16 +34,16 @@ const nav: NavItem[] = [
   { href: "/staff/pro", label: "Public Relations", perm: "news:manage", special: "pro" },
   { href: "/staff/security/checkin", label: "Security gate", perm: "security:checkin" },
   {
-    href: "/staff/pcm?kind=pcm",
-    label: "PCM Registry",
+    href: "/staff/pcm",
+    label: "Registry",
     perm: "pcm:read",
     special: "registry",
   },
   {
-    href: "/staff/pcm?kind=cm",
-    label: "CM Registry",
-    perm: "pcm:read",
-    special: "registry",
+    href: "/staff/clinic",
+    label: "Clinic",
+    perm: "camp:clinic",
+    special: "clinic",
   },
   {
     href: "/staff/accommodation",
@@ -102,7 +103,6 @@ function isAccommodationOnly(roles: string[], permissions: string[]) {
   if (!isAcc) return false;
   if (permissions.includes("*")) return false;
   if (roles.some((r) => r.toLowerCase() === "super admin")) return false;
-  // Pure accommodation desk: hide registry menus
   const hasOps = roles.some((r) =>
     [
       "security officer",
@@ -111,6 +111,9 @@ function isAccommodationOnly(roles: string[], permissions: string[]) {
       "camp director",
       "platoon",
       "clinic",
+      "doctor",
+      "nurse",
+      "pharmacist",
       "bank account",
       "pro",
     ].some((k) => r.toLowerCase().includes(k))
@@ -136,6 +139,9 @@ function isProOnly(roles: string[], permissions: string[]) {
       "camp director",
       "platoon",
       "clinic",
+      "doctor",
+      "nurse",
+      "pharmacist",
       "bank account",
       "accommodation",
     ].some((k) => r.toLowerCase().includes(k))
@@ -213,6 +219,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     roles.some((r) => r.toLowerCase() === "super admin") || perms.includes("*");
   const proOnly = isProOnly(roles, perms);
   const accOnly = isAccommodationOnly(roles, perms);
+  const clinicOnly = isClinicOnly(roles, perms);
   const isRegistration =
     roles.includes("Registration Officer") ||
     perms.includes("registration:complete");
@@ -238,6 +245,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     perms.includes("accommodation:assign") ||
     perms.includes("hostel:manage") ||
     roles.some((r) => r.toLowerCase().includes("accommodation"));
+  const clinicDesk = isSuper || hasClinicAccess(roles, perms);
 
   const can = (p: string | null) => {
     if (!p) return true;
@@ -248,6 +256,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (p === "platoon:attendance" && platoonDesk) return true;
     if (p === "news:manage" && proDesk) return true;
     if (p === "accommodation:read" && accommodationDesk) return true;
+    if (p === "camp:clinic" && clinicDesk) return true;
     if (p === "user:create" && isSuper) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
@@ -256,33 +265,23 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   };
 
   const visible = nav.filter((n) => {
-    if (proOnly) {
-      return n.href === "/staff/pro";
-    }
-    // Accommodation officer: Dashboard + Accommodation only
+    if (proOnly) return n.href === "/staff/pro";
     if (accOnly) {
-      return (
-        n.href === "/staff/dashboard" ||
-        n.href === "/staff/accommodation"
-      );
+      return n.href === "/staff/dashboard" || n.href === "/staff/accommodation";
+    }
+    // Clinic staff: Dashboard + Clinic only (no registry — patient search is inside clinic)
+    if (clinicOnly) {
+      return n.href === "/staff/dashboard" || n.href === "/staff/clinic";
     }
     if (n.special === "exit") return exitDesk;
     if (n.special === "platoon") return platoonDesk;
     if (n.special === "pro") return proDesk;
     if (n.special === "accommodation") return accommodationDesk;
-    if (n.special === "registry") {
-      // Explicitly hide registry from pure accommodation (already handled),
-      // still require pcm:read for everyone else
-      if (!can("pcm:read")) return false;
-      return true;
-    }
+    if (n.special === "clinic") return clinicDesk;
+    if (n.special === "registry") return can("pcm:read");
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
-      return [
-        "/staff/security/checkin",
-        "/staff/pcm?kind=pcm",
-        "/staff/pcm?kind=cm",
-      ].includes(n.href);
+      return ["/staff/security/checkin", "/staff/pcm"].includes(n.href);
     }
     return true;
   });
@@ -291,20 +290,12 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const createLinks = visible.filter((n) => n.group === "create");
 
   function NavLink({ item }: { item: NavItem }) {
-    const search =
-      typeof window !== "undefined" ? window.location.search : "";
-    const isCmNav = item.href.includes("kind=cm");
-    const isPcmNav = item.href.includes("kind=pcm") || item.href === "/staff/pcm";
     const active =
-      isCmNav
-        ? pathname.startsWith("/staff/pcm") && search.includes("kind=cm")
-        : isPcmNav
-          ? pathname.startsWith("/staff/pcm") &&
-            (search.includes("kind=pcm") ||
-              (!search.includes("kind=cm") && item.href.includes("kind=pcm")))
-          : item.href === "/staff/e-file"
-            ? pathname.startsWith("/staff/e-file") || pathname.startsWith("/staff/exit")
-            : pathname.startsWith(item.href.split("?")[0]);
+      item.href === "/staff/e-file"
+        ? pathname.startsWith("/staff/e-file") || pathname.startsWith("/staff/exit")
+        : item.href === "/staff/pcm"
+          ? pathname.startsWith("/staff/pcm")
+          : pathname.startsWith(item.href.split("?")[0]);
     return (
       <Link
         href={item.href}
@@ -335,9 +326,11 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
                 ? "PRO"
                 : accOnly
                   ? "Accommodation"
-                  : isSecurity && !isSuper
-                    ? "Security"
-                    : "Staff"}
+                  : clinicOnly
+                    ? "Clinic"
+                    : isSecurity && !isSuper
+                      ? "Security"
+                      : "Staff"}
             </div>
           </div>
         </div>
