@@ -3,7 +3,19 @@ import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { canAccessExitDesk } from "@/lib/exit-workflow";
 
-const FILE_TYPES = ["CAMP_EXIT", "LEAVE", "RELOCATION", "GENERAL"] as const;
+const FILE_TYPES = [
+  "CAMP_EXIT",
+  "LEAVE",
+  "SICK_LEAVE",
+  "CASUAL_LEAVE",
+  "MATERNITY_LEAVE",
+  "CONVOCATION_LEAVE",
+  "RELOCATION",
+  "REPOSTING",
+  "GENERAL",
+  "QUERY",
+  "OTHERS",
+] as const;
 
 export async function GET(req: Request) {
   const auth = await requireAuth(req);
@@ -43,6 +55,7 @@ export async function GET(req: Request) {
             institution: true,
             deploymentState: true,
             dateReporting: true,
+            stateCode: true,
           },
         },
         minutes: {
@@ -90,18 +103,23 @@ export async function POST(req: Request) {
     ? (typeRaw as (typeof FILE_TYPES)[number])
     : "GENERAL";
   const subject = String(body.subject ?? "").trim();
+  const otherLabel = body.otherLabel ? String(body.otherLabel).trim() : "";
   const minute = body.minute ? String(body.minute).trim() : "";
   const priority = String(body.priority ?? "NORMAL").toUpperCase();
   const photoUrls: string[] = Array.isArray(body.photoUrls)
     ? body.photoUrls.map(String).filter(Boolean)
     : [];
   const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
+  const nextToUserIds: string[] = Array.isArray(body.nextToUserIds)
+    ? body.nextToUserIds.map(String).filter(Boolean)
+    : nextToUserId
+      ? [nextToUserId]
+      : [];
   const ground = body.ground ? String(body.ground).trim().toUpperCase() : null;
 
   if (!pcmId) return jsonError("pcmId required");
-  if (!subject && !minute) return jsonError("Subject or minute required");
+  if (!subject && !minute && !otherLabel) return jsonError("Subject or minute required");
 
-  // Camp exit has its own chain — redirect clients to exit-requests API
   if (type === "CAMP_EXIT") {
     return jsonError("Use camp-exit flow for type CAMP_EXIT", 400);
   }
@@ -115,40 +133,68 @@ export async function POST(req: Request) {
   });
   const actorName = actor?.name?.trim() || actor?.email || auth.payload.email;
 
-  let nextAssigneeId: string | null = null;
-  let nextAssigneeName: string | null = null;
-  if (nextToUserId) {
-    const next = await prisma.user.findFirst({
-      where: { id: nextToUserId, isActive: true },
+  const uniqueIds = [...new Set(nextToUserIds)];
+  let primaryId: string | null = null;
+  let primaryName: string | null = null;
+  const ccList: { id: string; name: string }[] = [];
+
+  if (uniqueIds.length) {
+    const users = await prisma.user.findMany({
+      where: { id: { in: uniqueIds }, isActive: true },
       select: { id: true, name: true, email: true },
     });
-    if (next) {
-      nextAssigneeId = next.id;
-      nextAssigneeName = next.name?.trim() || next.email;
+    const byId = new Map(users.map((u) => [u.id, u]));
+    for (const id of uniqueIds) {
+      const u = byId.get(id);
+      if (!u) continue;
+      const name = u.name?.trim() || u.email;
+      if (!primaryId) {
+        primaryId = u.id;
+        primaryName = name;
+      } else {
+        ccList.push({ id: u.id, name });
+      }
     }
   }
+
+  const resolvedSubject =
+    subject ||
+    otherLabel ||
+    minute.slice(0, 120) ||
+    type;
 
   try {
     const file = await prisma.electronicFile.create({
       data: {
         pcmId,
-        type,
-        subject: subject || minute.slice(0, 120) || type,
+        type: type as
+          | "GENERAL"
+          | "LEAVE"
+          | "SICK_LEAVE"
+          | "CASUAL_LEAVE"
+          | "MATERNITY_LEAVE"
+          | "CONVOCATION_LEAVE"
+          | "RELOCATION"
+          | "REPOSTING"
+          | "QUERY"
+          | "OTHERS",
+        subject: resolvedSubject,
         priority: priority || "NORMAL",
-        status: nextAssigneeId ? "IN_TRANSIT" : "PENDING",
+        status: primaryId ? "IN_TRANSIT" : "PENDING",
         groundCode: ground,
         openedById: auth.payload.sub,
         openedByName: actorName,
-        currentHolderId: nextAssigneeId,
-        currentHolderName: nextAssigneeName,
+        currentHolderId: primaryId,
+        currentHolderName: primaryName,
         minutes: {
           create: {
             fromUserId: auth.payload.sub,
             fromName: actorName,
-            toUserId: nextAssigneeId,
-            toName: nextAssigneeName,
-            body: minute || subject || `File opened (${type}).`,
-            action: nextAssigneeId ? "FORWARD" : "DRAFT",
+            toUserId: primaryId,
+            toName: primaryName,
+            ccJson: ccList.length ? JSON.stringify(ccList) : null,
+            body: minute || subject || otherLabel || `File opened (${type}).`,
+            action: primaryId ? "FORWARD" : "DRAFT",
             attachmentUrlsJson: photoUrls.length
               ? JSON.stringify(photoUrls)
               : null,
@@ -162,6 +208,7 @@ export async function POST(req: Request) {
             callUpNumber: true,
             fullName: true,
             photographUrl: true,
+            stateCode: true,
           },
         },
       },
@@ -176,7 +223,12 @@ export async function POST(req: Request) {
       entityType: "ElectronicFile",
       entityId: file.id,
       pcmId,
-      after: { type, subject: file.subject, nextAssigneeName },
+      after: {
+        type,
+        subject: file.subject,
+        nextAssigneeName: primaryName,
+        cc: ccList.map((c) => c.name),
+      },
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
