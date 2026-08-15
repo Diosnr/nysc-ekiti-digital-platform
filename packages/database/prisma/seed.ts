@@ -95,6 +95,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     "bank:register",
     "bank:update",
   ],
+  "PRO": ["news:manage", "announcement:manage"],
   "State Coordinator": [
     "dashboard:view",
     "pcm:read",
@@ -185,6 +186,10 @@ async function main() {
     { name: "Security Officer", description: "Camp security check-in/out and PCM intake at gate" },
     { name: "Registration Officer", description: "Camp registration, platoon from state code, bulk import" },
     { name: "Bank Account Officer", description: "NIN / bank account desk — sensitive Account section only" },
+    {
+      name: "PRO",
+      description: "Public Relations Officer — news and announcements only",
+    },
     { name: "Accommodation Officer", description: "Hostel and bed allocation" },
     { name: "Platoon Officer", description: "Kit issue, attendance, exit initiation (no platoon assign)" },
     { name: "Head of Platoon Officers", description: "Oversees all platoon officers" },
