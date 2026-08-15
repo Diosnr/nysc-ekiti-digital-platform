@@ -23,7 +23,7 @@ type NavItem = {
   label: string;
   perm: string | null;
   group?: "create";
-  special?: "exit" | "platoon" | "pro";
+  special?: "exit" | "platoon" | "pro" | "accommodation";
 };
 
 const ShellCtx = createContext(false);
@@ -32,8 +32,14 @@ const nav: NavItem[] = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
   { href: "/staff/pro", label: "Public Relations", perm: "news:manage", special: "pro" },
   { href: "/staff/security/checkin", label: "Security gate", perm: "security:checkin" },
-  { href: "/staff/pcm", label: "PCM Registry", perm: "pcm:read" },
+  { href: "/staff/pcm?kind=pcm", label: "PCM Registry", perm: "pcm:read" },
   { href: "/staff/pcm?kind=cm", label: "CM Registry", perm: "pcm:read" },
+  {
+    href: "/staff/accommodation",
+    label: "Accommodation",
+    perm: "accommodation:read",
+    special: "accommodation",
+  },
   {
     href: "/staff/registration",
     label: "Registration",
@@ -97,6 +103,7 @@ function isProOnly(roles: string[], permissions: string[]) {
       "platoon",
       "clinic",
       "bank account",
+      "accommodation",
     ].some((k) => r.toLowerCase().includes(k))
   );
   return !ops;
@@ -190,6 +197,12 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
       (r) =>
         r.toLowerCase() === "pro" || r.toLowerCase().includes("public relations")
     );
+  const accommodationDesk =
+    isSuper ||
+    perms.includes("accommodation:read") ||
+    perms.includes("accommodation:assign") ||
+    perms.includes("hostel:manage") ||
+    roles.some((r) => r.toLowerCase().includes("accommodation"));
 
   const can = (p: string | null) => {
     if (!p) return true;
@@ -199,6 +212,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (p === "camp:exeat" && exitDesk) return true;
     if (p === "platoon:attendance" && platoonDesk) return true;
     if (p === "news:manage" && proDesk) return true;
+    if (p === "accommodation:read" && accommodationDesk) return true;
     if (p === "user:create" && isSuper) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
@@ -213,11 +227,14 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (n.special === "exit") return exitDesk;
     if (n.special === "platoon") return platoonDesk;
     if (n.special === "pro") return proDesk;
+    if (n.special === "accommodation") return accommodationDesk;
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
-      return ["/staff/security/checkin", "/staff/pcm", "/staff/pcm?kind=cm"].includes(
-        n.href
-      );
+      return [
+        "/staff/security/checkin",
+        "/staff/pcm?kind=pcm",
+        "/staff/pcm?kind=cm",
+      ].includes(n.href);
     }
     return true;
   });
@@ -229,16 +246,17 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     const search =
       typeof window !== "undefined" ? window.location.search : "";
     const isCmNav = item.href.includes("kind=cm");
-    const isPcmNav = item.href === "/staff/pcm";
+    const isPcmNav = item.href.includes("kind=pcm") || item.href === "/staff/pcm";
     const active =
       isCmNav
         ? pathname.startsWith("/staff/pcm") && search.includes("kind=cm")
         : isPcmNav
-          ? pathname === "/staff/pcm" ||
-            (pathname.startsWith("/staff/pcm/") && !search.includes("kind=cm"))
+          ? pathname.startsWith("/staff/pcm") &&
+            (search.includes("kind=pcm") ||
+              (!search.includes("kind=cm") && item.href.includes("kind=pcm")))
           : item.href === "/staff/e-file"
             ? pathname.startsWith("/staff/e-file") || pathname.startsWith("/staff/exit")
-            : pathname.startsWith(item.href);
+            : pathname.startsWith(item.href.split("?")[0]);
     return (
       <Link
         href={item.href}
