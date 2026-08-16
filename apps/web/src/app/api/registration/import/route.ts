@@ -2,10 +2,10 @@ import { prisma } from "@/lib/db";
 import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { writeAudit } from "@/lib/audit";
 import { mapRowFields } from "@/lib/csv";
+import { toStoredStateCode } from "@/lib/state-code";
 
 function parseDob(raw: string): Date | null {
   if (!raw) return null;
-  // dd/mm/yyyy or d/m/yyyy
   const m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (m) {
     const d = Number(m[1]);
@@ -24,7 +24,9 @@ export async function POST(req: Request) {
   if (auth instanceof Response) return auth;
 
   const body = await req.json();
-  const rawRows: Record<string, string>[] = Array.isArray(body.rows) ? body.rows : [];
+  const rawRows: Record<string, string>[] = Array.isArray(body.rows)
+    ? body.rows
+    : [];
   if (!rawRows.length) return jsonError("rows required");
   if (rawRows.length > 500) return jsonError("Max 500 rows per chunk");
 
@@ -69,11 +71,18 @@ export async function POST(req: Request) {
 
       const dob = parseDob(mapped.dateOfBirth || "");
       const noteBits: string[] = [];
-      if (mapped.maritalStatus) noteBits.push(`Marital: ${mapped.maritalStatus}`);
-      if (mapped.qualification) noteBits.push(`Qual: ${mapped.qualification}`);
+      if (mapped.maritalStatus)
+        noteBits.push(`Marital: ${mapped.maritalStatus}`);
+      if (mapped.qualification)
+        noteBits.push(`Qual: ${mapped.qualification}`);
       if (mapped.cds) noteBits.push(`CDS: ${mapped.cds}`);
-      if (mapped.idCardVerifyUrl) noteBits.push(`ID card: ${mapped.idCardVerifyUrl}`);
-      if (mapped.permanentAddress) noteBits.push(`Perm addr: ${mapped.permanentAddress}`);
+      if (mapped.idCardVerifyUrl)
+        noteBits.push(`ID card: ${mapped.idCardVerifyUrl}`);
+      if (mapped.permanentAddress)
+        noteBits.push(`Perm addr: ${mapped.permanentAddress}`);
+
+      // Only formal codes e.g. EK/26B/0367 — never "Ekiti"
+      const validStateCode = toStoredStateCode(mapped.stateCode);
 
       if (existing) {
         const data: Record<string, unknown> = {};
@@ -98,8 +107,7 @@ export async function POST(req: Request) {
         fillStr("originState", mapped.originState);
         fillStr("photographUrl", mapped.photographUrl);
 
-        // Always refresh operational codes from official export when present
-        if (mapped.stateCode) data.stateCode = mapped.stateCode;
+        if (validStateCode) data.stateCode = validStateCode;
         if (mapped.platoonCode) {
           data.platoonCode = mapped.platoonCode;
           if (!existing.platoonAssignedAt) {
@@ -114,7 +122,8 @@ export async function POST(req: Request) {
         if (mapped.ziName) data.ziName = mapped.ziName;
         if (mapped.ziPhone) data.ziPhone = mapped.ziPhone;
         if (dob && !existing.dateOfBirth) data.dateOfBirth = dob;
-        if (noteBits.length && !existing.notes) data.notes = noteBits.join(" | ");
+        if (noteBits.length && !existing.notes)
+          data.notes = noteBits.join(" | ");
 
         if (Object.keys(data).length) {
           await prisma.pcm.update({ where: { id: existing.id }, data });
@@ -125,17 +134,23 @@ export async function POST(req: Request) {
       } else {
         if (!mapped.fullName) {
           skipped++;
-          errors.push({ row: i, callUp, error: "fullName required to create" });
+          errors.push({
+            row: i,
+            callUp,
+            error: "fullName required to create",
+          });
           continue;
         }
         await prisma.pcm.create({
           data: {
             callUpNumber: callUp,
             fullName: mapped.fullName,
-            stateCode: mapped.stateCode || null,
+            stateCode: validStateCode,
             platoonCode: mapped.platoonCode || null,
             platoonAssignedAt: mapped.platoonCode ? new Date() : null,
-            platoonAssignedByName: mapped.platoonCode ? `Import · ${actorName}` : null,
+            platoonAssignedByName: mapped.platoonCode
+              ? `Import · ${actorName}`
+              : null,
             ppaName: mapped.ppaName || null,
             ppaAddress: mapped.ppaAddress || null,
             lgiName: mapped.lgiName || null,
@@ -182,7 +197,9 @@ export async function POST(req: Request) {
       updatedCount: { increment: updated },
       skippedCount: { increment: skipped },
       errorCount: { increment: errors.length },
-      errorSample: errors.length ? JSON.stringify(errors.slice(0, 20)) : undefined,
+      errorSample: errors.length
+        ? JSON.stringify(errors.slice(0, 20))
+        : undefined,
       status: done ? "COMPLETED" : "RUNNING",
       totalRows: body.totalRows ? Number(body.totalRows) : undefined,
     },
