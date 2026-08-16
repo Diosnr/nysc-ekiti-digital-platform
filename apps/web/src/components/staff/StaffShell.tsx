@@ -12,6 +12,7 @@ import {
 import { clearTokens, getAccessToken, staffFetch } from "@/lib/staff-api";
 import { canAccessExitDesk } from "@/lib/exit-workflow";
 import { hasClinicAccess, isClinicOnly } from "@/lib/clinic-access";
+import { hasBankAccess, isBankOnly } from "@/lib/bank-access";
 
 type Me = {
   user: { name: string | null; email: string };
@@ -24,7 +25,14 @@ type NavItem = {
   label: string;
   perm: string | null;
   group?: "create";
-  special?: "exit" | "platoon" | "pro" | "accommodation" | "registry" | "clinic";
+  special?:
+    | "exit"
+    | "platoon"
+    | "pro"
+    | "accommodation"
+    | "registry"
+    | "clinic"
+    | "bank";
 };
 
 const ShellCtx = createContext(false);
@@ -44,6 +52,12 @@ const nav: NavItem[] = [
     label: "Clinic",
     perm: "camp:clinic",
     special: "clinic",
+  },
+  {
+    href: "/staff/bank",
+    label: "Bank / Account",
+    perm: "bank:register",
+    special: "bank",
   },
   {
     href: "/staff/accommodation",
@@ -220,6 +234,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const proOnly = isProOnly(roles, perms);
   const accOnly = isAccommodationOnly(roles, perms);
   const clinicOnly = isClinicOnly(roles, perms);
+  const bankOnly = isBankOnly(roles, perms);
   const isRegistration =
     roles.includes("Registration Officer") ||
     perms.includes("registration:complete");
@@ -246,6 +261,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     perms.includes("hostel:manage") ||
     roles.some((r) => r.toLowerCase().includes("accommodation"));
   const clinicDesk = isSuper || hasClinicAccess(roles, perms);
+  const bankDesk = isSuper || hasBankAccess(roles, perms);
 
   const can = (p: string | null) => {
     if (!p) return true;
@@ -257,6 +273,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (p === "news:manage" && proDesk) return true;
     if (p === "accommodation:read" && accommodationDesk) return true;
     if (p === "camp:clinic" && clinicDesk) return true;
+    if (p === "bank:register" && bankDesk) return true;
     if (p === "user:create" && isSuper) return true;
     if (isSecurity && !isSuper) {
       return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
@@ -269,7 +286,6 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (accOnly) {
       return n.href === "/staff/dashboard" || n.href === "/staff/accommodation";
     }
-    // Clinic staff: Dashboard + Clinic + E-File (medical exit / minutes)
     if (clinicOnly) {
       return (
         n.href === "/staff/dashboard" ||
@@ -277,11 +293,15 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
         n.href === "/staff/e-file"
       );
     }
+    if (bankOnly) {
+      return n.href === "/staff/dashboard" || n.href === "/staff/bank";
+    }
     if (n.special === "exit") return exitDesk;
     if (n.special === "platoon") return platoonDesk;
     if (n.special === "pro") return proDesk;
     if (n.special === "accommodation") return accommodationDesk;
     if (n.special === "clinic") return clinicDesk;
+    if (n.special === "bank") return bankDesk;
     if (n.special === "registry") return can("pcm:read");
     if (!can(n.perm)) return false;
     if (isSecurity && !isSuper) {
@@ -332,9 +352,11 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
                   ? "Accommodation"
                   : clinicOnly
                     ? "Clinic"
-                    : isSecurity && !isSuper
-                      ? "Security"
-                      : "Staff"}
+                    : bankOnly
+                      ? "Bank"
+                      : isSecurity && !isSuper
+                        ? "Security"
+                        : "Staff"}
             </div>
           </div>
         </div>
