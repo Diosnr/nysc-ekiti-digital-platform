@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireAuth, jsonOk, jsonError } from "@/lib/api";
 import { loadUserAuthContext } from "@/lib/auth-server";
 import { isPlatoonOfficerRole } from "@/lib/platoon-tenure";
+import { isValidStateCode } from "@/lib/state-code";
 
 export async function GET(req: Request) {
   const auth = await requireAuth(req);
@@ -46,13 +47,23 @@ export async function GET(req: Request) {
     filters.push({ platoonCode: ctx.user.platoonCode });
   }
 
-  // Business rule: CM = has state code; PCM = without state code
+  /**
+   * CM = formal state code e.g. EK/26B/0367 (must contain "/" path segments).
+   * PCM = null/empty OR junk values like "Ekiti" (no valid code pattern).
+   * DB filter approximates pattern; we post-filter with isValidStateCode.
+   */
   if (kind === "cm") {
     filters.push({ stateCode: { not: null } });
     filters.push({ NOT: { stateCode: "" } });
+    filters.push({ stateCode: { contains: "/" } });
   } else if (kind === "pcm") {
     filters.push({
-      OR: [{ stateCode: null }, { stateCode: "" }],
+      OR: [
+        { stateCode: null },
+        { stateCode: "" },
+        // names / junk without slash path → treat as PCM
+        { NOT: { stateCode: { contains: "/" } } },
+      ],
     });
   }
 
@@ -76,10 +87,13 @@ export async function GET(req: Request) {
 
   const where = filters.length ? { AND: filters } : {};
 
-  const pcms = await prisma.pcm.findMany({
+  // Over-fetch slightly so post-filter still fills a page for CM
+  const take = kind === "cm" || kind === "pcm" ? limit + 20 : limit + 1;
+
+  const rows = await prisma.pcm.findMany({
     where,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
+    take: take + 1,
     ...(cursor
       ? {
           cursor: { id: cursor },
@@ -111,8 +125,15 @@ export async function GET(req: Request) {
     },
   });
 
-  const hasMore = pcms.length > limit;
-  const page = hasMore ? pcms.slice(0, limit) : pcms;
+  let filtered = rows;
+  if (kind === "cm") {
+    filtered = rows.filter((p) => isValidStateCode(p.stateCode));
+  } else if (kind === "pcm") {
+    filtered = rows.filter((p) => !isValidStateCode(p.stateCode));
+  }
+
+  const hasMore = filtered.length > limit;
+  const page = hasMore ? filtered.slice(0, limit) : filtered;
   const nextCursor = hasMore ? page[page.length - 1]?.id ?? null : null;
 
   return jsonOk({ pcms: page, nextCursor, hasMore, limit, kind: kind || "all" });

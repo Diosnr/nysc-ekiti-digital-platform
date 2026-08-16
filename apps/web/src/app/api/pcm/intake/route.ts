@@ -10,6 +10,9 @@ import { uploadDataUriToCloudinary } from "@/lib/cloudinary";
  * Staff-only PCM intake.
  * previewOnly: parse NYSC QR page → return fields (no write)
  * confirm: create PCM (photo required)
+ *
+ * stateCode is NOT set from deployment state (e.g. "Ekiti").
+ * Formal codes (EK/26B/0367) come later from registration / official export.
  */
 export async function POST(req: Request) {
   try {
@@ -111,7 +114,6 @@ export async function POST(req: Request) {
       return jsonError("Photo is required for intake", 400);
     }
 
-    // Always persist on Cloudinary (data URI or remote NYSC URL)
     if (!/res\.cloudinary\.com/i.test(photographUrl)) {
       const uploaded = await uploadDataUriToCloudinary(
         photographUrl,
@@ -146,7 +148,8 @@ export async function POST(req: Request) {
         institution: institution || null,
         photographUrl,
         deploymentState: deploymentState || null,
-        stateCode: deploymentState || null,
+        // Never copy deployment state into stateCode ("Ekiti" is not EK/26B/0367)
+        stateCode: null,
         campAddress: campAddress || null,
         dateReporting: dateReporting || null,
         batchYear: batchYear || null,
