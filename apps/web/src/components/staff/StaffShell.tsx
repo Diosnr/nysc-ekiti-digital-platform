@@ -254,11 +254,9 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
       (r) =>
         r.toLowerCase() === "pro" || r.toLowerCase().includes("public relations")
     );
+  // Accommodation menu: Accommodation Officer + Super Admin only
   const accommodationDesk =
     isSuper ||
-    perms.includes("accommodation:read") ||
-    perms.includes("accommodation:assign") ||
-    perms.includes("hostel:manage") ||
     roles.some((r) => r.toLowerCase().includes("accommodation"));
   const clinicDesk = isSuper || hasClinicAccess(roles, perms);
   const bankDesk = isSuper || hasBankAccess(roles, perms);
@@ -276,10 +274,34 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (p === "bank:register" && bankDesk) return true;
     if (p === "user:create" && isSuper) return true;
     if (isSecurity && !isSuper) {
-      return ["security:checkin", "pcm:read", "pcm:search"].includes(p);
+      return ["security:checkin"].includes(p);
     }
     return false;
   };
+
+  // Pure security desk: gate only (no Registry, no Accommodation)
+  const securityOnly =
+    isSecurity &&
+    !isSuper &&
+    !accOnly &&
+    !clinicOnly &&
+    !bankOnly &&
+    !proOnly &&
+    !roles.some((r) =>
+      [
+        "registration",
+        "platoon",
+        "state coordinator",
+        "camp director",
+        "clinic",
+        "doctor",
+        "nurse",
+        "pharmacist",
+        "bank",
+        "accommodation",
+        "pro",
+      ].some((k) => r.toLowerCase().includes(k))
+    );
 
   const visible = nav.filter((n) => {
     if (proOnly) return n.href === "/staff/pro";
@@ -296,17 +318,24 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (bankOnly) {
       return n.href === "/staff/dashboard" || n.href === "/staff/bank";
     }
+    if (securityOnly) {
+      return (
+        n.href === "/staff/dashboard" ||
+        n.href === "/staff/security/checkin"
+      );
+    }
     if (n.special === "exit") return exitDesk;
     if (n.special === "platoon") return platoonDesk;
     if (n.special === "pro") return proDesk;
     if (n.special === "accommodation") return accommodationDesk;
     if (n.special === "clinic") return clinicDesk;
     if (n.special === "bank") return bankDesk;
-    if (n.special === "registry") return can("pcm:read");
-    if (!can(n.perm)) return false;
-    if (isSecurity && !isSuper) {
-      return ["/staff/security/checkin", "/staff/pcm"].includes(n.href);
+    if (n.special === "registry") {
+      // Never for pure security; require pcm:read for others
+      if (isSecurity && !isSuper) return false;
+      return can("pcm:read");
     }
+    if (!can(n.perm)) return false;
     return true;
   });
 
@@ -354,7 +383,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
                     ? "Clinic"
                     : bankOnly
                       ? "Bank"
-                      : isSecurity && !isSuper
+                      : securityOnly
                         ? "Security"
                         : "Staff"}
             </div>
