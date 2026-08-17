@@ -121,6 +121,12 @@ export async function GET(req: Request) {
       ppaAddress: true,
       kitIssuedAt: true,
       kitIssuedByName: true,
+      campExitGrantedAt: true,
+      exitReason: true,
+      exitDestinationState: true,
+      exitDestinationLga: true,
+      expectedReturnAt: true,
+      checkedOutAt: true,
       createdAt: true,
     },
   });
