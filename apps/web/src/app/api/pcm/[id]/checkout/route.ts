@@ -13,7 +13,7 @@ export async function POST(req: Request, { params }: Params) {
   const pcm = await prisma.pcm.findUnique({ where: { id } });
   if (!pcm) return jsonError("PCM not found", 404);
 
-  if (pcm.status === "CHECKED_OUT") {
+  if (pcm.status === "CHECKED_OUT" || pcm.status === "CAMP_EXITED") {
     return jsonOk({ pcm, message: "Already checked out" });
   }
 
@@ -25,6 +25,8 @@ export async function POST(req: Request, { params }: Params) {
   let body: {
     exitReason?: string;
     exitDestinationState?: string;
+    exitDestinationLga?: string;
+    expectedReturnAt?: string;
   } = {};
   try {
     body = await req.json();
@@ -34,8 +36,22 @@ export async function POST(req: Request, { params }: Params) {
 
   const exitReason = String(body.exitReason ?? "").trim();
   const exitDestinationState = String(body.exitDestinationState ?? "").trim();
+  const exitDestinationLga = String(body.exitDestinationLga ?? "").trim();
   if (!exitReason) return jsonError("Reason for exit is required");
   if (!exitDestinationState) return jsonError("Destination state is required");
+  if (!exitDestinationLga) return jsonError("Destination LGA is required");
+
+  let expectedReturnAt: Date | null = null;
+  if (body.expectedReturnAt) {
+    const raw = String(body.expectedReturnAt).trim();
+    if (raw) {
+      const d = new Date(raw.includes("T") ? raw : raw + "T12:00:00");
+      if (Number.isNaN(d.getTime())) {
+        return jsonError("Invalid date of return");
+      }
+      expectedReturnAt = d;
+    }
+  }
 
   const checkedOutAt = new Date();
   const updated = await prisma.pcm.update({
@@ -44,6 +60,8 @@ export async function POST(req: Request, { params }: Params) {
       status: "CHECKED_OUT",
       exitReason,
       exitDestinationState,
+      exitDestinationLga,
+      expectedReturnAt,
       checkedOutAt,
     },
   });
@@ -62,6 +80,8 @@ export async function POST(req: Request, { params }: Params) {
       status: updated.status,
       exitReason,
       exitDestinationState,
+      exitDestinationLga,
+      expectedReturnAt: expectedReturnAt?.toISOString() ?? null,
       checkedOutAt: checkedOutAt.toISOString(),
       eligibility: eligibility.reason,
     },
