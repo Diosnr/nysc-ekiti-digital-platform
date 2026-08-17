@@ -90,7 +90,7 @@ const CAMP_WEEKS = 3;
  * Checkout is allowed when:
  * 1. An administrator granted camp exit (campExitGrantedAt set), OR
  * 2. 3 weeks have elapsed since date of reporting.
- * Caller still requires status CHECKED_IN (or CAMP_ACTIVE).
+ * In-camp statuses include CHECKED_IN, CAMP_ACTIVE, and related lifecycle states.
  */
 export function evaluateCheckoutEligibility(pcm: {
   status?: string | null;
@@ -103,19 +103,47 @@ export function evaluateCheckoutEligibility(pcm: {
   eligibleFrom?: string;
 } {
   const st = pcm.status ?? "";
-  if (st !== "CHECKED_IN" && st !== "CAMP_ACTIVE") {
+  const inCamp = [
+    "CHECKED_IN",
+    "CAMP_ACTIVE",
+    "ACCOMMODATED",
+    "PLATOON_ASSIGNED",
+    "KIT_ISSUED",
+    "BANK_REGISTERED",
+    "CAMP_EXIT_REQUESTED",
+    "REGISTERED",
+  ].includes(st);
+
+  if (st === "CHECKED_OUT" || st === "CAMP_EXITED") {
     return {
       canCheckout: false,
       reason: "not_checked_in",
-      message: "Member must be checked in before checkout.",
+      message: "Member is already checked out.",
     };
   }
 
+  if (!inCamp && st !== "VERIFIED" && st !== "MOBILISED") {
+    return {
+      canCheckout: false,
+      reason: "not_checked_in",
+      message: "Member must be on the camp roll (checked in) before checkout.",
+    };
+  }
+
+  // Exit grant allows checkout even if still marked VERIFIED (edge) or any in-camp status
   if (pcm.campExitGrantedAt) {
     return {
       canCheckout: true,
       reason: "exit_granted",
-      message: "Exit granted by administrator.",
+      message: "Exit granted — security may check out this member.",
+    };
+  }
+
+  if (!inCamp) {
+    return {
+      canCheckout: false,
+      reason: "not_checked_in",
+      message: "Member must be checked in before checkout.",
     };
   }
 
