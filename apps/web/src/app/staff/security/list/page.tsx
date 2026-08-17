@@ -205,7 +205,11 @@ function SecurityListInner() {
               className="flex gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
             >
               <div className="shrink-0">
-                <PcmPhoto url={p.photographUrl} alt={p.fullName} size="sm" />
+                <PcmPhoto
+                  url={p.photographUrl}
+                  alt={p.fullName}
+                  sizeClass="h-16 w-16"
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-slate-900">{p.fullName}</p>
