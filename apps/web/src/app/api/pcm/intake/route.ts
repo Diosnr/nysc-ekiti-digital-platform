@@ -9,7 +9,7 @@ import { uploadDataUriToCloudinary } from "@/lib/cloudinary";
 /**
  * Staff-only PCM intake.
  * previewOnly: parse NYSC QR page → return fields (no write)
- * confirm: create PCM (photo required)
+ * confirm: create PCM (photo required) and auto check-in
  *
  * stateCode is NOT set from deployment state (e.g. "Ekiti").
  * Formal codes (EK/26B/0367) come later from registration / official export.
@@ -140,6 +140,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // New intake at the gate: create record and check them in immediately
     const pcm = await prisma.pcm.create({
       data: {
         callUpNumber,
@@ -154,7 +155,7 @@ export async function POST(req: Request) {
         dateReporting: dateReporting || null,
         batchYear: batchYear || null,
         stream: batchYear || null,
-        status: "VERIFIED",
+        status: "CHECKED_IN",
         createdById: payload.sub,
         verifications: {
           create: {
@@ -169,6 +170,7 @@ export async function POST(req: Request) {
               batchYear,
               dateReporting,
               hasPhoto: true,
+              autoCheckedIn: true,
             }),
             verifiedAt: new Date(),
           },
@@ -191,7 +193,22 @@ export async function POST(req: Request) {
         deploymentState: pcm.deploymentState,
         batchYear: pcm.batchYear,
         photographUrl: pcm.photographUrl,
+        status: pcm.status,
+        autoCheckedIn: true,
       },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    await writeAudit({
+      actorId: payload.sub,
+      actorEmail: payload.email,
+      actorRoleAtTime: payload.roles.join(","),
+      action: "pcm.security.checkin",
+      entityType: "Pcm",
+      entityId: pcm.id,
+      pcmId: pcm.id,
+      after: { status: "CHECKED_IN", source: "intake_auto" },
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
@@ -212,6 +229,7 @@ export async function POST(req: Request) {
           photographUrl: pcm.photographUrl,
           status: pcm.status,
         },
+        message: "PCM created and checked in",
       },
       201
     );

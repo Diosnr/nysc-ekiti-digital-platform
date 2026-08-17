@@ -142,7 +142,7 @@ export default function StaffDashboardPage() {
       const isSecurity =
         roles.includes("Security Officer") && !roles.includes("Super Admin");
       if (isSecurity) {
-        router.replace("/staff/security/checkin");
+        router.replace("/staff/security");
         return;
       }
       if (isExecutive(roles, perms)) {
@@ -191,7 +191,7 @@ export default function StaffDashboardPage() {
   ) {
     return (
       <StaffShell>
-        <p className="text-slate-600">Opening security gate…</p>
+        <p className="text-slate-600">Opening security dashboard…</p>
       </StaffShell>
     );
   }
@@ -523,11 +523,11 @@ export default function StaffDashboardPage() {
             )}
             {(isSuper || perms.includes("security:checkin")) && (
               <Link
-                href="/staff/security/checkin"
+                href="/staff/security"
                 className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-nysc-green/40"
               >
-                <p className="font-semibold text-slate-900">Security gate</p>
-                <p className="mt-1 text-sm text-slate-600">Check-in and check-out</p>
+                <p className="font-semibold text-slate-900">Security</p>
+                <p className="mt-1 text-sm text-slate-600">Dashboard, check-in and check-out</p>
               </Link>
             )}
             {(isSuper || perms.includes("registration:complete")) && (

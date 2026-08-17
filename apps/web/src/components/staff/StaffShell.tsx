@@ -40,7 +40,7 @@ const ShellCtx = createContext(false);
 const nav: NavItem[] = [
   { href: "/staff/dashboard", label: "Dashboard", perm: null },
   { href: "/staff/pro", label: "Public Relations", perm: "news:manage", special: "pro" },
-  { href: "/staff/security/checkin", label: "Security gate", perm: "security:checkin" },
+  { href: "/staff/security", label: "Security", perm: "security:checkin" },
   {
     href: "/staff/pcm",
     label: "Registry",
@@ -254,7 +254,6 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
       (r) =>
         r.toLowerCase() === "pro" || r.toLowerCase().includes("public relations")
     );
-  // Accommodation menu: Accommodation Officer + Super Admin only
   const accommodationDesk =
     isSuper ||
     roles.some((r) => r.toLowerCase().includes("accommodation"));
@@ -279,7 +278,6 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     return false;
   };
 
-  // Pure security desk: gate only (no Registry, no Accommodation)
   const securityOnly =
     isSecurity &&
     !isSuper &&
@@ -321,6 +319,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (securityOnly) {
       return (
         n.href === "/staff/dashboard" ||
+        n.href === "/staff/security" ||
         n.href === "/staff/security/checkin"
       );
     }
@@ -331,7 +330,6 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     if (n.special === "clinic") return clinicDesk;
     if (n.special === "bank") return bankDesk;
     if (n.special === "registry") {
-      // Never for pure security; require pcm:read for others
       if (isSecurity && !isSuper) return false;
       return can("pcm:read");
     }
@@ -348,7 +346,9 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
         ? pathname.startsWith("/staff/e-file") || pathname.startsWith("/staff/exit")
         : item.href === "/staff/pcm"
           ? pathname.startsWith("/staff/pcm")
-          : pathname.startsWith(item.href.split("?")[0]);
+          : item.href === "/staff/security"
+            ? pathname.startsWith("/staff/security")
+            : pathname.startsWith(item.href.split("?")[0]);
     return (
       <Link
         href={item.href}
