@@ -171,6 +171,11 @@ export default function EFilingPage() {
   const [actOfficers, setActOfficers] = useState<Officer[]>([]);
   const [actNextTo, setActNextTo] = useState("");
   const [actNextIds, setActNextIds] = useState<string[]>([]);
+  /** Full-screen lightbox: list of image URLs + current index */
+  const [lightbox, setLightbox] = useState<{
+    urls: string[];
+    index: number;
+  } | null>(null);
 
   useEffect(() => {
     staffFetch("/api/auth/me").then(async (res) => {
@@ -190,6 +195,33 @@ export default function EFilingPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Close lightbox on Escape
+  useEffect(() => {
+    if (!lightbox) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightbox(null);
+      if (e.key === "ArrowRight" && lightbox && lightbox.urls.length > 1) {
+        setLightbox((prev) =>
+          prev
+            ? { ...prev, index: (prev.index + 1) % prev.urls.length }
+            : null
+        );
+      }
+      if (e.key === "ArrowLeft" && lightbox && lightbox.urls.length > 1) {
+        setLightbox((prev) =>
+          prev
+            ? {
+                ...prev,
+                index: (prev.index - 1 + prev.urls.length) % prev.urls.length,
+              }
+            : null
+        );
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox]);
 
   const roles = me?.roles ?? [];
   const perms = me?.permissions ?? [];
@@ -449,6 +481,12 @@ export default function EFilingPage() {
     );
   }
 
+  function openLightbox(urls: string[], index: number) {
+    const valid = urls.filter(isPhotoSrc).map(normalizePhotoSrc);
+    if (!valid.length) return;
+    setLightbox({ urls: valid, index: Math.min(index, valid.length - 1) });
+  }
+
   const tabs: { id: Tab; label: string }[] = [
     {
       id: "my_queue",
@@ -667,11 +705,23 @@ export default function EFilingPage() {
                 ← Close
               </button>
               <div className="mt-3 flex gap-4">
-                <PcmPhoto
-                  url={selected.pcm.photographUrl}
-                  alt={selected.pcm.fullName}
-                  sizeClass="h-24 w-24"
-                />
+                <button
+                  type="button"
+                  className="shrink-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-nysc-green"
+                  onClick={() => {
+                    if (isPhotoSrc(selected.pcm.photographUrl)) {
+                      openLightbox([selected.pcm.photographUrl!], 0);
+                    }
+                  }}
+                  title="View full size"
+                >
+                  <PcmPhoto
+                    url={selected.pcm.photographUrl}
+                    alt={selected.pcm.fullName}
+                    sizeClass="h-24 w-24"
+                    className="cursor-pointer transition hover:opacity-90"
+                  />
+                </button>
                 <div className="min-w-0">
                   <h2 className="text-lg font-bold">{selected.pcm.fullName}</h2>
                   <p className="font-mono text-sm text-slate-600">
@@ -717,55 +767,81 @@ export default function EFilingPage() {
                           } as Minute,
                         ]
                       : []
-                  ).map((m) => (
-                    <div
-                      key={m.id}
-                      className="rounded-xl border border-slate-100 bg-slate-50/80 p-3"
-                    >
-                      <p className="text-[11px] font-medium text-slate-400">
-                        {new Date(m.createdAt).toLocaleString()} · {m.action}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-600">
-                        <strong>FROM:</strong> {m.fromName}
-                        {m.toName ? (
-                          <>
-                            <br />
-                            <strong>TO:</strong> {m.toName}
-                          </>
-                        ) : null}
-                      </p>
-                      <p className="mt-2 whitespace-pre-wrap text-slate-800">{m.body}</p>
-                      {m.attachments && m.attachments.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {m.attachments.filter(isPhotoSrc).map((u, i) => (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              key={i}
-                              src={normalizePhotoSrc(u)}
-                              alt={`Attachment ${i + 1}`}
-                              className="h-20 w-20 rounded border border-slate-200 object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  ).map((m) => {
+                    const atts = (m.attachments ?? []).filter(isPhotoSrc);
+                    return (
+                      <div
+                        key={m.id}
+                        className="rounded-xl border border-slate-100 bg-slate-50/80 p-3"
+                      >
+                        <p className="text-[11px] font-medium text-slate-400">
+                          {new Date(m.createdAt).toLocaleString()} · {m.action}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          <strong>FROM:</strong> {m.fromName}
+                          {m.toName ? (
+                            <>
+                              <br />
+                              <strong>TO:</strong> {m.toName}
+                            </>
+                          ) : null}
+                        </p>
+                        <p className="mt-2 whitespace-pre-wrap text-slate-800">{m.body}</p>
+                        {atts.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {atts.map((u, i) => (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                key={i}
+                                src={normalizePhotoSrc(u)}
+                                alt={`Attachment ${i + 1}`}
+                                className="h-20 w-20 cursor-pointer rounded border border-slate-200 object-cover transition hover:opacity-90 hover:ring-2 hover:ring-nysc-green/40"
+                                referrerPolicy="no-referrer"
+                                role="button"
+                                tabIndex={0}
+                                title="Click to expand"
+                                onClick={() => openLightbox(atts, i)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    openLightbox(atts, i);
+                                  }
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
 
               {selected.kind === "exit" && selected.photoUrls?.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {selected.photoUrls.filter(isPhotoSrc).map((u, i) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={i}
-                      src={normalizePhotoSrc(u)}
-                      alt=""
-                      className="h-20 w-20 rounded border border-slate-200 object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ))}
+                  {selected.photoUrls.filter(isPhotoSrc).map((u, i) => {
+                    const urls = selected.photoUrls.filter(isPhotoSrc);
+                    return (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={i}
+                        src={normalizePhotoSrc(u)}
+                        alt=""
+                        className="h-20 w-20 cursor-pointer rounded border border-slate-200 object-cover transition hover:opacity-90 hover:ring-2 hover:ring-nysc-green/40"
+                        referrerPolicy="no-referrer"
+                        role="button"
+                        tabIndex={0}
+                        title="Click to expand"
+                        onClick={() => openLightbox(urls, i)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openLightbox(urls, i);
+                          }
+                        }}
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -898,6 +974,79 @@ export default function EFilingPage() {
                 )}
             </div>
           </aside>
+        </div>
+      )}
+
+      {/* Full-screen image lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image viewer"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            className="absolute right-4 top-4 z-10 rounded-full bg-white/10 px-3 py-1.5 text-sm font-medium text-white backdrop-blur hover:bg-white/20"
+            onClick={() => setLightbox(null)}
+          >
+            Close ✕
+          </button>
+          {lightbox.urls.length > 1 && (
+            <>
+              <button
+                type="button"
+                className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 px-3 py-2 text-xl text-white backdrop-blur hover:bg-white/20"
+                aria-label="Previous"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightbox((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          index:
+                            (prev.index - 1 + prev.urls.length) % prev.urls.length,
+                        }
+                      : null
+                  );
+                }}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 px-3 py-2 text-xl text-white backdrop-blur hover:bg-white/20"
+                aria-label="Next"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightbox((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          index: (prev.index + 1) % prev.urls.length,
+                        }
+                      : null
+                  );
+                }}
+              >
+                ›
+              </button>
+            </>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox.urls[lightbox.index]}
+            alt="Full size"
+            className="max-h-[90vh] max-w-[95vw] object-contain shadow-2xl"
+            referrerPolicy="no-referrer"
+            onClick={(e) => e.stopPropagation()}
+          />
+          {lightbox.urls.length > 1 && (
+            <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs text-white">
+              {lightbox.index + 1} / {lightbox.urls.length}
+            </p>
+          )}
         </div>
       )}
     </StaffShell>
