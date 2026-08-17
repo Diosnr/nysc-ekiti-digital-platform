@@ -65,7 +65,7 @@ export default function StaffPcmIntakePage() {
   const [qrRaw, setQrRaw] = useState("");
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [camps, setCamps] = useState<CampOpt[]>([]);
-  /** Security desk should return to gate, never Registry */
+  /** Security desk should return to security hub, never Registry */
   const [fromSecurity, setFromSecurity] = useState(false);
 
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
@@ -268,10 +268,10 @@ export default function StaffPcmIntakePage() {
           </p>
         </div>
         <Link
-          href={fromSecurity ? "/staff/security/checkin" : "/staff/pcm"}
+          href={fromSecurity ? "/staff/security" : "/staff/pcm"}
           className="text-sm font-medium text-nysc-green hover:underline"
         >
-          {fromSecurity ? "← Security gate" : "← Registry"}
+          {fromSecurity ? "← Security dashboard" : "← Registry"}
         </Link>
       </div>
 
@@ -523,16 +523,16 @@ export default function StaffPcmIntakePage() {
 
       {step === "done" && (
         <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-8 text-center">
-          <p className="font-semibold text-green-900">PCM registered</p>
+          <p className="font-semibold text-green-900">PCM registered & checked in</p>
           <p className="mt-2 text-lg font-bold text-slate-900">{form.fullName}</p>
           <p className="font-mono text-sm text-slate-600">{form.callUpNumber}</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             {fromSecurity ? (
               <Link
-                href="/staff/security/checkin"
+                href="/staff/security"
                 className="rounded-md bg-nysc-green px-4 py-2 text-sm font-semibold text-white"
               >
-                Back to Security gate
+                Back to Security dashboard
               </Link>
             ) : (
               createdId && (
