@@ -23,6 +23,8 @@ type PcmRow = {
   campExitGrantedAt?: string | null;
   exitReason?: string | null;
   exitDestinationState?: string | null;
+  exitDestinationLga?: string | null;
+  expectedReturnAt?: string | null;
   checkedOutAt?: string | null;
 };
 
@@ -224,11 +226,17 @@ function SecurityListInner() {
                     Exit granted {new Date(p.campExitGrantedAt).toLocaleString()}
                   </p>
                 )}
-                {type === "checked-out" && p.checkedOutAt && (
+                {type === "checked-out" && (
                   <p className="mt-0.5 text-xs text-slate-500">
-                    Out {new Date(p.checkedOutAt).toLocaleString()}
+                    {p.checkedOutAt
+                      ? `Out ${new Date(p.checkedOutAt).toLocaleString()}`
+                      : "Checked out"}
                     {p.exitDestinationState ? ` → ${p.exitDestinationState}` : ""}
+                    {p.exitDestinationLga ? ` / ${p.exitDestinationLga}` : ""}
                     {p.exitReason ? ` · ${p.exitReason}` : ""}
+                    {p.expectedReturnAt
+                      ? ` · return ${new Date(p.expectedReturnAt).toLocaleDateString()}`
+                      : ""}
                   </p>
                 )}
               </div>
