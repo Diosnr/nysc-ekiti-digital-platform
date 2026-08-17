@@ -87,6 +87,8 @@ export async function GET(req: Request) {
     campExitGrantedAt: true,
     exitReason: true,
     exitDestinationState: true,
+    exitDestinationLga: true,
+    expectedReturnAt: true,
     checkedOutAt: true,
     createdAt: true,
   } as const;
@@ -110,6 +112,8 @@ export async function GET(req: Request) {
       "campExitGrantedAt",
       "exitReason",
       "exitDestinationState",
+      "exitDestinationLga",
+      "expectedReturnAt",
       "checkedOutAt",
     ];
 
@@ -127,6 +131,8 @@ export async function GET(req: Request) {
         campExitGrantedAt: r.campExitGrantedAt?.toISOString() ?? "",
         exitReason: r.exitReason,
         exitDestinationState: r.exitDestinationState,
+        exitDestinationLga: r.exitDestinationLga,
+        expectedReturnAt: r.expectedReturnAt?.toISOString() ?? "",
         checkedOutAt: r.checkedOutAt?.toISOString() ?? "",
       }))
     );
