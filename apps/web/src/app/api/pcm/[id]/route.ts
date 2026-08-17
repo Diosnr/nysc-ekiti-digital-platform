@@ -3,14 +3,42 @@ import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { loadUserAuthContext } from "@/lib/auth-server";
 import { resolveGeoScope, pcmScopeWhere } from "@/lib/scope";
 import { writeAudit } from "@/lib/audit";
+import { canAccessExitDesk } from "@/lib/exit-workflow";
 
 type Params = { params: Promise<{ id: string }> };
 
 function canViewNin(roles: string[], permissions: string[]): boolean {
-  if (permissions.includes("*") || permissions.includes("bank:register") || permissions.includes("bank:update")) {
+  if (
+    permissions.includes("*") ||
+    permissions.includes("bank:register") ||
+    permissions.includes("bank:update")
+  ) {
     return true;
   }
-  return roles.some((r) => r.toLowerCase().includes("bank account") || r.toLowerCase() === "super admin");
+  return roles.some(
+    (r) =>
+      r.toLowerCase().includes("bank account") ||
+      r.toLowerCase() === "super admin"
+  );
+}
+
+function canViewBank(roles: string[], permissions: string[]): boolean {
+  return canViewNin(roles, permissions);
+}
+
+function canViewClinic(roles: string[], permissions: string[]): boolean {
+  if (permissions.includes("*") || permissions.includes("camp:clinic")) {
+    return true;
+  }
+  const r = roles.map((x) => x.toLowerCase());
+  return r.some(
+    (x) =>
+      x.includes("camp doctor") ||
+      x.includes("camp nurse") ||
+      x.includes("camp pharmacist") ||
+      x.includes("head of clinic") ||
+      x === "super admin"
+  );
 }
 
 export async function GET(req: Request, { params }: Params) {
@@ -24,6 +52,13 @@ export async function GET(req: Request, { params }: Params) {
     zoneCode: ctx?.user.zoneCode,
   });
 
+  const roles = auth.payload.roles;
+  const permissions = auth.payload.permissions;
+  const showNin = canViewNin(roles, permissions);
+  const showBank = canViewBank(roles, permissions);
+  const showEfile = canAccessExitDesk(roles, permissions);
+  const showClinic = canViewClinic(roles, permissions);
+
   const pcm = await prisma.pcm.findFirst({
     where: {
       AND: [{ id }, pcmScopeWhere(scope)],
@@ -32,18 +67,91 @@ export async function GET(req: Request, { params }: Params) {
       verifications: { orderBy: { verifiedAt: "desc" }, take: 5 },
       familyStatuses: { orderBy: { createdAt: "desc" }, take: 10 },
       skillProfiles: { orderBy: { createdAt: "desc" }, take: 10 },
-      ninRecords: { orderBy: { createdAt: "desc" }, take: 10 },
+      ninRecords: showNin
+        ? { orderBy: { createdAt: "desc" }, take: 10 }
+        : false,
+      bankRegistration: showBank,
+      bed: {
+        include: {
+          hostel: { select: { id: true, name: true, genderRestriction: true } },
+        },
+      },
+      exitRequests: showEfile
+        ? {
+            orderBy: { initiatedAt: "desc" },
+            take: 10,
+            select: {
+              id: true,
+              ground: true,
+              reasonDetail: true,
+              stage: true,
+              initiatedByName: true,
+              initiatedAt: true,
+              nextAssigneeName: true,
+              clinicNote: true,
+              directorNote: true,
+              coordinatorNote: true,
+              rejectReason: true,
+              rejectedByName: true,
+              rejectedAt: true,
+            },
+          }
+        : false,
+      electronicFiles: showEfile
+        ? {
+            orderBy: { createdAt: "desc" },
+            take: 20,
+            select: {
+              id: true,
+              type: true,
+              subject: true,
+              priority: true,
+              status: true,
+              groundCode: true,
+              exitRequestId: true,
+              openedByName: true,
+              currentHolderName: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          }
+        : false,
+      clinicEncounters: showClinic
+        ? {
+            orderBy: { openedAt: "desc" },
+            take: 5,
+            select: {
+              id: true,
+              status: true,
+              chiefComplaint: true,
+              diagnosis: true,
+              openedByName: true,
+              openedAt: true,
+              closedAt: true,
+            },
+          }
+        : false,
     },
   });
 
   if (!pcm) return jsonError("PCM not found", 404);
 
-  if (!canViewNin(auth.payload.roles, auth.payload.permissions)) {
-    const { ninRecords: _n, ...rest } = pcm;
-    return jsonOk({ pcm: { ...rest, ninRecords: [] } });
-  }
+  const payload = {
+    ...pcm,
+    ninRecords: showNin ? pcm.ninRecords ?? [] : [],
+    bankRegistration: showBank ? pcm.bankRegistration ?? null : null,
+    exitRequests: showEfile ? pcm.exitRequests ?? [] : [],
+    electronicFiles: showEfile ? pcm.electronicFiles ?? [] : [],
+    clinicEncounters: showClinic ? pcm.clinicEncounters ?? [] : [],
+    _meta: {
+      canViewNin: showNin,
+      canViewBank: showBank,
+      canViewEfile: showEfile,
+      canViewClinic: showClinic,
+    },
+  };
 
-  return jsonOk({ pcm });
+  return jsonOk({ pcm: payload });
 }
 
 export async function DELETE(req: Request, { params }: Params) {
