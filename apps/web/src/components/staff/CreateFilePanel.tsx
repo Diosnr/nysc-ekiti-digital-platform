@@ -422,6 +422,19 @@ export function CreateFilePanel({
               className="mt-1 block w-full text-sm"
               onChange={(e) => onPhotoFiles(e.target.files)}
             />
+            {photoUrls.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {photoUrls.map((u, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={u}
+                    alt={`Selected ${i + 1}`}
+                    className="h-16 w-16 rounded border border-slate-200 object-cover"
+                  />
+                ))}
+              </div>
+            )}
           </div>
           <button
             type="submit"

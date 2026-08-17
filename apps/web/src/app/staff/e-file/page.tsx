@@ -133,6 +133,24 @@ function statusLabel(s: string) {
   return map[s] ?? s;
 }
 
+/** True if the value can be used as an <img src>. */
+function isPhotoSrc(url?: string | null): boolean {
+  if (!url?.trim()) return false;
+  const u = url.trim();
+  return (
+    /^https?:\/\//i.test(u) ||
+    u.startsWith("//") ||
+    u.startsWith("data:image") ||
+    u.startsWith("/")
+  );
+}
+
+function normalizePhotoSrc(url: string): string {
+  const u = url.trim();
+  if (u.startsWith("//")) return `https:${u}`;
+  return u;
+}
+
 export default function EFilingPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [tab, setTab] = useState<Tab | null>(null);
@@ -717,6 +735,20 @@ export default function EFilingPage() {
                         ) : null}
                       </p>
                       <p className="mt-2 whitespace-pre-wrap text-slate-800">{m.body}</p>
+                      {m.attachments && m.attachments.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {m.attachments.filter(isPhotoSrc).map((u, i) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={i}
+                              src={normalizePhotoSrc(u)}
+                              alt={`Attachment ${i + 1}`}
+                              className="h-20 w-20 rounded border border-slate-200 object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -724,9 +756,15 @@ export default function EFilingPage() {
 
               {selected.kind === "exit" && selected.photoUrls?.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {selected.photoUrls.map((u, i) => (
+                  {selected.photoUrls.filter(isPhotoSrc).map((u, i) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img key={i} src={u} alt="" className="h-20 w-20 rounded object-cover" />
+                    <img
+                      key={i}
+                      src={normalizePhotoSrc(u)}
+                      alt=""
+                      className="h-20 w-20 rounded border border-slate-200 object-cover"
+                      referrerPolicy="no-referrer"
+                    />
                   ))}
                 </div>
               )}
