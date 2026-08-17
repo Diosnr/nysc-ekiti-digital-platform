@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireAnyAuth, jsonOk } from "@/lib/api";
 
 /** Statuses that mean the member is still inside camp (present). */
-export const IN_CAMP_STATUSES = [
+const IN_CAMP_STATUSES = [
   "CHECKED_IN",
   "CAMP_ACTIVE",
   "ACCOMMODATED",
@@ -12,7 +12,7 @@ export const IN_CAMP_STATUSES = [
   "CAMP_EXIT_REQUESTED",
 ] as const;
 
-export const OUT_STATUSES = ["CHECKED_OUT", "CAMP_EXITED"] as const;
+const OUT_STATUSES = ["CHECKED_OUT", "CAMP_EXITED"] as const;
 
 export async function GET(req: Request) {
   const auth = await requireAnyAuth(req, ["security:checkin", "pcm:read"]);
