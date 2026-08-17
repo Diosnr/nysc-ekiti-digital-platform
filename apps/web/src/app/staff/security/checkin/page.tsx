@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { PcmPhoto } from "@/components/staff/PcmPhoto";
@@ -21,8 +21,21 @@ type PcmHit = {
   campExitGrantedAt?: string | null;
   exitReason?: string | null;
   exitDestinationState?: string | null;
+  exitDestinationLga?: string | null;
+  expectedReturnAt?: string | null;
   checkedOutAt?: string | null;
 };
+
+const IN_CAMP = new Set([
+  "CHECKED_IN",
+  "CAMP_ACTIVE",
+  "ACCOMMODATED",
+  "PLATOON_ASSIGNED",
+  "KIT_ISSUED",
+  "BANK_REGISTERED",
+  "CAMP_EXIT_REQUESTED",
+  "REGISTERED",
+]);
 
 export default function SecurityGatePage() {
   const [q, setQ] = useState("");
@@ -32,7 +45,38 @@ export default function SecurityGatePage() {
   const [loading, setLoading] = useState(false);
   const [exitReason, setExitReason] = useState("");
   const [exitState, setExitState] = useState("");
+  const [exitLga, setExitLga] = useState("");
+  const [returnDate, setReturnDate] = useState("");
+  const [lgas, setLgas] = useState<string[]>([]);
+  const [lgasLoading, setLgasLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    if (!exitState) {
+      setLgas([]);
+      return;
+    }
+    let cancelled = false;
+    setLgasLoading(true);
+    fetch(`/api/geo/lgas?state=${encodeURIComponent(exitState)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          if (!cancelled) setLgas([]);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setLgas((data.lgas ?? []) as string[]);
+      })
+      .catch(() => {
+        if (!cancelled) setLgas([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLgasLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [exitState]);
 
   async function search(e?: FormEvent) {
     e?.preventDefault();
@@ -60,9 +104,17 @@ export default function SecurityGatePage() {
       const exact = list.find(
         (p) => p.callUpNumber.toLowerCase() === q.trim().toLowerCase()
       );
-      setPcm(exact ?? list[0]);
-      setExitReason("");
-      setExitState("");
+      const hit = exact ?? list[0];
+      setPcm(hit);
+      // Pre-fill from approved exit request when present
+      setExitReason(hit.exitReason ?? "");
+      setExitState(hit.exitDestinationState ?? "");
+      setExitLga(hit.exitDestinationLga ?? "");
+      setReturnDate(
+        hit.expectedReturnAt
+          ? new Date(hit.expectedReturnAt).toISOString().slice(0, 10)
+          : ""
+      );
     } catch {
       setError("Network error");
     } finally {
@@ -87,6 +139,7 @@ export default function SecurityGatePage() {
         ...pcm,
         ...data.pcm,
         photographUrl: data.pcm.photographUrl || pcm.photographUrl,
+        campExitGrantedAt: data.pcm.campExitGrantedAt ?? pcm.campExitGrantedAt,
       });
     } catch {
       setError("Network error");
@@ -105,6 +158,10 @@ export default function SecurityGatePage() {
       setError("Select destination state");
       return;
     }
+    if (!exitLga.trim()) {
+      setError("Select destination LGA");
+      return;
+    }
     setLoading(true);
     setError(null);
     setMsg(null);
@@ -114,6 +171,8 @@ export default function SecurityGatePage() {
         body: JSON.stringify({
           exitReason: exitReason.trim(),
           exitDestinationState: exitState.trim(),
+          exitDestinationLga: exitLga.trim(),
+          expectedReturnAt: returnDate.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -122,7 +181,9 @@ export default function SecurityGatePage() {
         return;
       }
       setMsg(
-        `Checked out: ${data.pcm.fullName} → ${data.pcm.exitDestinationState} (${data.pcm.exitReason})`
+        `Checked out: ${data.pcm.fullName} → ${data.pcm.exitDestinationState}` +
+          (data.pcm.exitDestinationLga ? ` / ${data.pcm.exitDestinationLga}` : "") +
+          ` (${data.pcm.exitReason})`
       );
       setPcm({
         ...pcm,
@@ -138,6 +199,12 @@ export default function SecurityGatePage() {
 
   const eligibility = pcm ? evaluateCheckoutEligibility(pcm) : null;
   const showCheckout = Boolean(eligibility?.canCheckout);
+  const alreadyOut =
+    pcm?.status === "CHECKED_OUT" || pcm?.status === "CAMP_EXITED";
+  const alreadyIn = pcm ? IN_CAMP.has(pcm.status ?? "") : false;
+  const exitGranted = Boolean(pcm?.campExitGrantedAt);
+  // Never offer Check in when already in camp, already out, or exit has been granted
+  const showCheckin = Boolean(pcm && !alreadyOut && !alreadyIn && !exitGranted);
 
   return (
     <StaffShell>
@@ -148,7 +215,6 @@ export default function SecurityGatePage() {
         </p>
       </div>
 
-      {/* New intake entry — primary path for first-time corps members */}
       <Link
         href="/staff/pcm/intake"
         className="mt-6 flex items-start gap-4 rounded-2xl border border-nysc-green/30 bg-gradient-to-br from-green-50 to-white p-5 shadow-sm transition hover:border-nysc-green hover:shadow-md"
@@ -160,7 +226,7 @@ export default function SecurityGatePage() {
           <h2 className="text-base font-bold text-slate-900">New intake</h2>
           <p className="mt-1 text-sm text-slate-600">
             First time at the gate? Scan the call-up QR or enter details, capture photo, and
-            create the PCM record — then return here to check them in.
+            create the PCM record — they are checked in automatically.
           </p>
           <span className="mt-3 inline-flex items-center text-sm font-semibold text-nysc-green">
             Open intake →
@@ -173,8 +239,8 @@ export default function SecurityGatePage() {
           Check-in / check-out
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Search by call-up or name. Check out requires reason, destination state, and
-          eligibility (exit grant or 3 weeks from reporting).
+          Search by call-up or name. Check out requires reason, destination state and LGA.
+          Exit-approved members can be checked out immediately.
         </p>
       </div>
 
@@ -239,47 +305,72 @@ export default function SecurityGatePage() {
               Status:{" "}
               <span className="font-semibold text-slate-800">{pcm.status || "—"}</span>
             </p>
+            {pcm.campExitGrantedAt && !alreadyOut && (
+              <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                Exit approved — granted{" "}
+                {new Date(pcm.campExitGrantedAt).toLocaleString()}. Ready for check-out.
+              </p>
+            )}
             {pcm.checkedOutAt && (
               <p className="mt-1 text-xs text-slate-500">
-                Last out: {new Date(pcm.checkedOutAt).toLocaleString()}
+                Checked out {new Date(pcm.checkedOutAt).toLocaleString()}
                 {pcm.exitDestinationState ? ` → ${pcm.exitDestinationState}` : ""}
+                {pcm.exitDestinationLga ? ` / ${pcm.exitDestinationLga}` : ""}
                 {pcm.exitReason ? ` · ${pcm.exitReason}` : ""}
+                {pcm.expectedReturnAt
+                  ? ` · return ${new Date(pcm.expectedReturnAt).toLocaleDateString()}`
+                  : ""}
               </p>
             )}
 
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void doCheckin()}
-                className="rounded-md bg-nysc-green px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-              >
-                Check in
-              </button>
-            </div>
+            {showCheckin && (
+              <div className="mt-5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void doCheckin()}
+                  className="rounded-md bg-nysc-green px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                >
+                  Check in
+                </button>
+              </div>
+            )}
 
-            {showCheckout && (
+            {alreadyIn && !showCheckout && !alreadyOut && (
+              <p className="mt-3 text-xs text-slate-600">
+                Already checked in
+                {eligibility?.message ? ` — ${eligibility.message}` : "."}
+              </p>
+            )}
+
+            {showCheckout && !alreadyOut && (
               <div className="mt-6 space-y-3 border-t border-slate-100 pt-5">
-                <p className="text-sm font-semibold text-slate-800">Check out</p>
+                <p className="text-sm font-semibold text-slate-800">Check out…</p>
+                {eligibility?.reason === "exit_granted" && (
+                  <p className="text-xs text-amber-800">{eligibility.message}</p>
+                )}
                 <div>
                   <label className="text-[11px] font-semibold uppercase text-slate-400">
-                    Reason for exit
+                    Reason
                   </label>
                   <input
                     className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                     value={exitReason}
                     onChange={(e) => setExitReason(e.target.value)}
-                    placeholder="Reason"
+                    placeholder="Reason for exit"
                   />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold uppercase text-slate-400">
-                    Destination state
+                    State
                   </label>
                   <select
                     className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                     value={exitState}
-                    onChange={(e) => setExitState(e.target.value)}
+                    onChange={(e) => {
+                      setExitState(e.target.value);
+                      setExitLga("");
+                    }}
                   >
                     <option value="">Select state</option>
                     {NIGERIA_STATES.map((s) => (
@@ -289,21 +380,57 @@ export default function SecurityGatePage() {
                     ))}
                   </select>
                 </div>
-                <p className="text-xs text-slate-500">
-                  Exit time will be recorded automatically when you confirm.
-                </p>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-slate-400">
+                    LGA
+                  </label>
+                  <select
+                    className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    value={exitLga}
+                    onChange={(e) => setExitLga(e.target.value)}
+                    disabled={!exitState || lgasLoading}
+                  >
+                    <option value="">
+                      {!exitState
+                        ? "Select state first"
+                        : lgasLoading
+                          ? "Loading LGAs…"
+                          : "Select LGA"}
+                    </option>
+                    {lgas.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold uppercase text-slate-400">
+                    Date of return
+                  </label>
+                  <input
+                    type="date"
+                    className="mt-0.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    value={returnDate}
+                    onChange={(e) => setReturnDate(e.target.value)}
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Optional calendar date. Date of check-out is recorded automatically
+                    and shown on the member&apos;s profile / checked-out list.
+                  </p>
+                </div>
                 <button
                   type="button"
                   disabled={loading}
                   onClick={() => void doCheckout()}
-                  className="rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 disabled:opacity-40"
+                  className="rounded-md border border-slate-800 bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
                 >
                   Confirm check out
                 </button>
               </div>
             )}
 
-            {!showCheckout && eligibility && pcm.status === "CHECKED_IN" && (
+            {!showCheckout && eligibility && alreadyIn && (
               <p className="mt-3 text-xs text-amber-800">{eligibility.message}</p>
             )}
           </div>
