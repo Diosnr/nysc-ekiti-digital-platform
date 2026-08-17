@@ -263,6 +263,8 @@ model Pcm {
   exitGround            String?
   exitReason            String?
   exitDestinationState  String?
+  exitDestinationLga    String?
+  expectedReturnAt      DateTime?
   checkedOutAt          DateTime?
   ppaName               String?
   ppaAddress            String?
