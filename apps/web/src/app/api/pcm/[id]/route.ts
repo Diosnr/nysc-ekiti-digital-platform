@@ -79,7 +79,7 @@ export async function GET(req: Request, { params }: Params) {
       exitRequests: showEfile
         ? {
             orderBy: { initiatedAt: "desc" },
-            take: 10,
+            take: 25,
             select: {
               id: true,
               ground: true,
@@ -100,7 +100,7 @@ export async function GET(req: Request, { params }: Params) {
       electronicFiles: showEfile
         ? {
             orderBy: { createdAt: "desc" },
-            take: 20,
+            take: 50,
             select: {
               id: true,
               type: true,
@@ -113,6 +113,17 @@ export async function GET(req: Request, { params }: Params) {
               currentHolderName: true,
               createdAt: true,
               updatedAt: true,
+              minutes: {
+                orderBy: { createdAt: "asc" },
+                select: {
+                  id: true,
+                  fromName: true,
+                  toName: true,
+                  body: true,
+                  action: true,
+                  createdAt: true,
+                },
+              },
             },
           }
         : false,
