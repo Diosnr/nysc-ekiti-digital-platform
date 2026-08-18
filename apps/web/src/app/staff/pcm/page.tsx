@@ -7,6 +7,7 @@ import { StaffShell } from "@/components/staff/StaffShell";
 import { PcmPhoto } from "@/components/staff/PcmPhoto";
 import { TableSkeleton } from "@/components/Skeleton";
 import { staffFetch } from "@/lib/staff-api";
+import { PcmExtraSections } from "@/components/staff/PcmExtraSections";
 
 type Pcm = {
   id: string;
@@ -418,6 +419,8 @@ function PcmRegistryInner() {
                       ))}
                     </dl>
                   </section>
+
+                  <PcmExtraSections detail={detail as any} />
 
                   {isSuper && (
                     <button
