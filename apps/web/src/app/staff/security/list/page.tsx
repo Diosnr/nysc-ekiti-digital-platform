@@ -50,6 +50,32 @@ function SecurityListInner() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [checkoutId, setCheckoutId] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+
+  async function checkoutOne(id: string, name: string) {
+    if (!confirm(`Check out ${name}?`)) return;
+    setCheckoutId(id);
+    setActionMsg(null);
+    setError(null);
+    try {
+      const res = await staffFetch(`/api/pcm/${id}/checkout`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Check-out failed");
+        return;
+      }
+      setActionMsg(`Checked out: ${name}`);
+      await load(null, false);
+    } catch {
+      setError("Network error");
+    } finally {
+      setCheckoutId(null);
+    }
+  }
 
   const load = useCallback(
     async (cursor?: string | null, append = false) => {
@@ -188,6 +214,11 @@ function SecurityListInner() {
           {error}
         </p>
       )}
+      {actionMsg && (
+        <p className="mt-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+          {actionMsg}
+        </p>
+      )}
 
       <div className="mt-6 space-y-3">
         {loading && pcms.length === 0 ? (
@@ -240,6 +271,21 @@ function SecurityListInner() {
                   </p>
                 )}
               </div>
+              {type === "pending-exit" && (
+                <div className="flex shrink-0 items-center">
+                  <button
+                    type="button"
+                    disabled={checkoutId === p.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void checkoutOne(p.id, p.fullName);
+                    }}
+                    className="rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                  >
+                    {checkoutId === p.id ? "…" : "Check out"}
+                  </button>
+                </div>
+              )}
             </div>
           ))
         )}
