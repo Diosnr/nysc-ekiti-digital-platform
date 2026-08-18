@@ -389,7 +389,7 @@ export function CreateFilePanel({
                   : EXIT_GROUNDS.map((g) => ({
                       code: g.value,
                       label: g.label,
-                      requiresClinic: g.value === "MEDICAL",
+                      requiresClinic: g.value === "MEDICAL" || g.value === "HEALTH",
                     }))
                 ).map((g) => (
                   <option key={g.code} value={g.code}>

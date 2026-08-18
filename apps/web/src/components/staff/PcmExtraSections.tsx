@@ -97,6 +97,27 @@ export type PcmDetailExtra = {
   };
 };
 
+
+function formatFamilyStatuses(raw: string): string {
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) {
+      const labels: Record<string, string> = {
+        married_woman: "Married woman",
+        pregnant: "Pregnant",
+        nursing: "Nursing mother",
+        single_mother: "Single mother",
+      };
+      return arr
+        .map((s) => labels[String(s)] || String(s).replace(/_/g, " "))
+        .join(", ");
+    }
+  } catch {
+    /* plain string */
+  }
+  return raw;
+}
+
 function downloadProfile(detail: PcmDetailExtra) {
   const lines: string[] = [];
   lines.push(`NYSC Ekiti — member profile`);
@@ -195,7 +216,7 @@ function downloadProfile(detail: PcmDetailExtra) {
     lines.push("");
     lines.push("--- Family ---");
     for (const f of detail.familyStatuses) {
-      lines.push(`• ${f.statusesJson} · ${f.address}`);
+      lines.push(`• ${formatFamilyStatuses(f.statusesJson)} · ${f.address}`);
     }
   }
   if (detail.skillProfiles?.length) {
@@ -474,7 +495,7 @@ export function PcmExtraSections({
           <ul className="mt-2 space-y-1 text-sm">
             {detail.familyStatuses!.map((f) => (
               <li key={f.id} className="text-slate-700">
-                {f.statusesJson}
+                {formatFamilyStatuses(f.statusesJson)}
                 {f.husbandName ? ` · ${f.husbandName}` : ""} · {f.address}
                 {f.lga ? ` · ${f.lga}` : ""}
               </li>

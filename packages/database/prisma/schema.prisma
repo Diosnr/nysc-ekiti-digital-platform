@@ -415,7 +415,7 @@ model CampExitRequest {
   id                String         @id @default(cuid())
   pcmId             String
   pcm               Pcm            @relation(fields: [pcmId], references: [id], onDelete: Cascade)
-  ground            CampExitGround
+  ground            String
   reasonDetail      String?
   photoUrlsJson     String?
   stage             CampExitStage

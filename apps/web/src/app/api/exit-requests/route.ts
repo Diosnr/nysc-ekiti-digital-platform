@@ -5,6 +5,7 @@ import {
   firstStageAfterInitiation,
   canInitiateExit,
   canAccessExitDesk,
+  normalizeExitGroundCode,
 } from "@/lib/exit-workflow";
 
 const PENDING_STAGES = [
@@ -157,11 +158,14 @@ export async function POST(req: Request) {
   } catch {
     /* table missing until push */
   }
+  const canon = normalizeExitGroundCode(ground);
   if (requiresClinic === undefined) {
-    if (!["MARITAL", "MEDICAL", "TERRORISM"].includes(ground)) {
+    // Builtin / normalized codes
+    if (["MARITAL", "MEDICAL", "TERRORISM"].includes(canon)) {
+      requiresClinic = canon === "MEDICAL";
+    } else {
       return jsonError("Unknown exit ground");
     }
-    requiresClinic = ground === "MEDICAL";
   }
 
   const pcm = await prisma.pcm.findUnique({ where: { id: pcmId } });
@@ -198,20 +202,14 @@ export async function POST(req: Request) {
     }
   }
 
-  const groundForDb = ["MARITAL", "MEDICAL", "TERRORISM"].includes(ground)
-    ? ground
-    : requiresClinic
-      ? "MEDICAL"
-      : "MARITAL";
+  // Persist the actual selected code (HEALTH/MEDICAL/custom). Never force unknown → MARITAL.
+  const groundForDb = canon || ground;
 
   const row = await prisma.campExitRequest.create({
     data: {
       pcmId,
-      ground: groundForDb as "MARITAL" | "MEDICAL" | "TERRORISM",
-      reasonDetail:
-        ground !== groundForDb
-          ? `[${ground}] ${reasonDetail || ""}`.trim()
-          : reasonDetail,
+      ground: groundForDb,
+      reasonDetail: reasonDetail,
       photoUrlsJson: photoUrls.length ? JSON.stringify(photoUrls) : null,
       stage,
       initiatedById: auth.payload.sub,

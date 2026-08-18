@@ -1,4 +1,22 @@
 import { prisma } from "@/lib/db";
+
+const STATUS_LABELS: Record<string, string> = {
+  married_woman: "Married woman",
+  pregnant: "Pregnant",
+  nursing: "Nursing mother",
+  single_mother: "Single mother",
+};
+
+function formatStatuses(raw: string): string {
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) {
+      return arr.map((s) => STATUS_LABELS[String(s)] || String(s)).join("; ");
+    }
+  } catch { /* */ }
+  return raw;
+}
+
 import { requireAuth, jsonError } from "@/lib/api";
 
 function csvEscape(v: unknown): string {
@@ -65,7 +83,7 @@ export async function GET(req: Request) {
         rows.map((r) => ({
           callUpNumber: r.callUpNumber,
           fullName: r.fullName,
-          statuses: r.statusesJson,
+          statuses: formatStatuses(r.statusesJson),
           husbandName: r.husbandName,
           address: r.address,
           state: r.state,

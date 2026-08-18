@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, jsonOk, jsonError } from "@/lib/api";
 import { isValidStateCode } from "@/lib/state-code";
+import { normalizeExitGroundCode } from "@/lib/exit-workflow";
 
 function isExecutive(roles: string[], permissions: string[]): boolean {
   if (permissions.includes("*")) return true;
@@ -87,7 +88,14 @@ export async function GET(req: Request) {
       },
     }),
     prisma.campExitRequest.count({
-      where: { ground: "MEDICAL" },
+      where: {
+        OR: [
+          { ground: "MEDICAL" },
+          { ground: "HEALTH" },
+          { ground: { startsWith: "MEDICAL" } },
+          { ground: { startsWith: "HEALTH" } },
+        ],
+      },
     }),
     prisma.campExitRequest.count({
       where: { clinicByName: { not: null } },
@@ -100,8 +108,9 @@ export async function GET(req: Request) {
 
   const grounds = { MARITAL: 0, MEDICAL: 0, TERRORISM: 0 };
   for (const g of exitByGround) {
-    if (g.ground in grounds) {
-      grounds[g.ground as keyof typeof grounds] = g._count._all;
+    const key = normalizeExitGroundCode(String(g.ground)) as keyof typeof grounds;
+    if (key in grounds) {
+      grounds[key] += g._count._all;
     }
   }
 

@@ -8,6 +8,43 @@ export const EXIT_GROUNDS = [
 
 export type ExitGround = string;
 
+/** Normalize free-text / admin codes to canonical exit ground codes. */
+export function normalizeExitGroundCode(raw: string): string {
+  const g = String(raw ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (!g) return "";
+  if (
+    g === "MEDICAL" ||
+    g === "HEALTH" ||
+    g === "HEALTH_GROUNDS" ||
+    g === "MEDICAL_GROUNDS" ||
+    g === "SICK" ||
+    g === "SICKNESS" ||
+    g.startsWith("MEDICAL") ||
+    g.startsWith("HEALTH")
+  ) {
+    return "MEDICAL";
+  }
+  if (
+    g === "MARITAL" ||
+    g === "MARRIAGE" ||
+    g === "MARITAL_GROUNDS" ||
+    g.startsWith("MARITAL") ||
+    g.startsWith("MARRIAGE")
+  ) {
+    return "MARITAL";
+  }
+  if (
+    g === "TERRORISM" ||
+    g === "SECURITY" ||
+    g === "THREAT" ||
+    g.startsWith("TERROR")
+  ) {
+    return "TERRORISM";
+  }
+  return g;
+}
+
+
 export type ExitStage =
   | "AWAITING_CLINIC"
   | "AWAITING_CAMP_DIRECTOR"
@@ -27,11 +64,23 @@ export function isTerminalExitStage(stage: string): boolean {
 }
 
 export function groundLabel(g: string, catalog?: { code: string; label: string }[]): string {
+  const raw = String(g ?? "").trim();
+  if (!raw) return "—";
   if (catalog?.length) {
-    const hit = catalog.find((x) => x.code === g);
+    const hit =
+      catalog.find((x) => x.code === raw) ||
+      catalog.find((x) => x.code.toUpperCase() === raw.toUpperCase()) ||
+      catalog.find((x) => normalizeExitGroundCode(x.code) === normalizeExitGroundCode(raw));
     if (hit) return hit.label;
   }
-  return EXIT_GROUNDS.find((x) => x.value === g)?.label ?? g;
+  const canon = normalizeExitGroundCode(raw);
+  const builtin = EXIT_GROUNDS.find((x) => x.value === canon || x.value === raw);
+  if (builtin) return builtin.label;
+  // Humanize unknown codes: HEALTH_GROUNDS → Health grounds
+  return raw
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function stageLabel(s: string): string {
@@ -53,7 +102,7 @@ export function firstStageAfterInitiation(
 ): ExitStage {
   if (requiresClinic === true) return "AWAITING_CLINIC";
   if (requiresClinic === false) return "AWAITING_CAMP_DIRECTOR";
-  if (ground === "MEDICAL") return "AWAITING_CLINIC";
+  if (normalizeExitGroundCode(ground) === "MEDICAL") return "AWAITING_CLINIC";
   return "AWAITING_CAMP_DIRECTOR";
 }
 
