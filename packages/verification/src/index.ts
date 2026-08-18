@@ -176,12 +176,20 @@ export function parseNyscVerifyHtml(
 }
 
 export function extractNyscVerifyUrl(input: string): string | null {
-  const trimmed = input.trim();
+  const trimmed = input.replace(/[\u0000-\u001F]+/g, " ").trim();
   const match = trimmed.match(
     /https?:\/\/[^\s"'<>]*nysc\.org\.ng[^\s"'<>]*CorpMemberVerify\.aspx[^\s"'<>]*/i
   );
   if (match) {
-    return match[0].replace(/[.,;)]+$/, "");
+    return match[0].replace(/[.,;)\]]+$/, "");
+  }
+  // Some scanners drop the scheme; recover if host+path present
+  const bare = trimmed.match(
+    /(?:https?:\/\/)?(?:www\.)?mgt\.nysc\.org\.ng\/[^\s"'<>]*CorpMemberVerify\.aspx[^\s"'<>]*/i
+  );
+  if (bare) {
+    const u = bare[0].replace(/[.,;)\]]+$/, "");
+    return /^https?:\/\//i.test(u) ? u : `https://${u}`;
   }
   if (/^https?:\/\//i.test(trimmed) && /nysc\.org\.ng/i.test(trimmed)) {
     return trimmed;
@@ -205,7 +213,8 @@ export class QrPayloadAdapter implements CallUpVerificationAdapter {
   constructor(private allowGenericRemote: boolean) {}
 
   async verify(input: string): Promise<VerifiedCallUpData> {
-    const trimmed = input.trim();
+    // USB/BT wedge scanners often append CR/LF or null bytes
+    const trimmed = input.replace(/[\u0000-\u001F]+/g, " ").trim();
 
     if (trimmed.startsWith("{")) {
       const data = JSON.parse(trimmed) as Record<string, unknown>;

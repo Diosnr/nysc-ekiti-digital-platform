@@ -173,13 +173,28 @@ export function PcmIntakeClient() {
       const scanner = new Html5Qrcode(readerId, { verbose: false });
       scannerRef.current = scanner;
 
+      let cameraConfig: string | MediaTrackConstraints = {
+        facingMode: "environment",
+      };
+      try {
+        const cams = await Html5Qrcode.getCameras();
+        const rear = cams.find((c) =>
+          /back|rear|environment/i.test(c.label || "")
+        );
+        if (rear?.id) cameraConfig = rear.id;
+        else if (cams.length > 1) cameraConfig = cams[cams.length - 1].id;
+        else if (cams[0]?.id) cameraConfig = cams[0].id;
+      } catch {
+        /* facingMode fallback */
+      }
+
       await scanner.start(
-        { facingMode: "environment" },
+        cameraConfig,
         {
-          fps: 8,
+          fps: 10,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
             const edge = Math.floor(
-              Math.min(viewfinderWidth, viewfinderHeight) * 0.7
+              Math.min(viewfinderWidth, viewfinderHeight) * 0.72
             );
             return { width: edge, height: edge };
           },

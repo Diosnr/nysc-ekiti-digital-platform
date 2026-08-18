@@ -2,6 +2,10 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { PcmPhoto } from "@/components/staff/PcmPhoto";
+import {
+  PcmExtraSections,
+  type PcmDetailExtra,
+} from "@/components/staff/PcmExtraSections";
 import { staffFetch } from "@/lib/staff-api";
 import {
   EXIT_GROUNDS,
@@ -65,6 +69,9 @@ export function CreateFilePanel({
   const [otherLabel, setOtherLabel] = useState("");
   const [q, setQ] = useState("");
   const [pcmHit, setPcmHit] = useState<PcmHit | null>(null);
+  const [pcmDetail, setPcmDetail] = useState<PcmDetailExtra | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const [subject, setSubject] = useState("");
   const [ground, setGround] = useState(
     grounds[0]?.code || EXIT_GROUNDS[0].value
@@ -74,6 +81,22 @@ export function CreateFilePanel({
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [selectedOfficerIds, setSelectedOfficerIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  async function loadPcmDetail(id: string) {
+    setDetailLoading(true);
+    setPcmDetail(null);
+    try {
+      const res = await staffFetch(`/api/pcm/${id}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.pcm) {
+        setPcmDetail(data.pcm as PcmDetailExtra);
+      }
+    } catch {
+      /* non-blocking */
+    } finally {
+      setDetailLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (grounds.length && !grounds.find((g) => g.code === ground)) {
@@ -109,6 +132,8 @@ export function CreateFilePanel({
   async function searchPcm(e: FormEvent) {
     e.preventDefault();
     setPcmHit(null);
+    setPcmDetail(null);
+    setShowDetail(false);
     if (!q.trim()) return;
     setLoading(true);
     try {
@@ -131,6 +156,7 @@ export function CreateFilePanel({
             p.callUpNumber.toLowerCase() === q.trim().toLowerCase()
         ) ?? hits[0];
       setPcmHit(hit);
+      void loadPcmDetail(hit.id);
     } catch {
       onError("Network error");
     } finally {
@@ -322,6 +348,18 @@ export function CreateFilePanel({
                   <dd>{pcmHit.ppaName || "—"}</dd>
                 </div>
               </dl>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetail(true);
+                  if (!pcmDetail && pcmHit) void loadPcmDetail(pcmHit.id);
+                }}
+                className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                {detailLoading
+                  ? "Loading profile…"
+                  : "View full profile (e-files, exit, bank…)"}
+              </button>
             </div>
           </div>
 
@@ -444,6 +482,66 @@ export function CreateFilePanel({
             {loading ? "Opening…" : "Forward file"}
           </button>
         </form>
+      )}
+
+      {showDetail && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/40">
+          <button
+            type="button"
+            aria-label="Close profile"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setShowDetail(false)}
+          />
+          <aside className="relative flex h-full w-full max-w-md flex-col overflow-y-auto bg-white shadow-2xl sm:max-w-lg">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Member profile
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowDetail(false)}
+                className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+            <div className="space-y-4 p-4">
+              {detailLoading && (
+                <p className="text-sm text-slate-500">Loading full profile…</p>
+              )}
+              {!detailLoading && pcmDetail && (
+                <>
+                  <div className="flex items-start gap-3">
+                    <PcmPhoto
+                      url={
+                        pcmDetail.photographUrl as string | null | undefined
+                      }
+                      alt={pcmDetail.fullName || ""}
+                      sizeClass="h-16 w-16"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">
+                        {pcmDetail.fullName}
+                      </p>
+                      <p className="font-mono text-xs text-slate-600">
+                        {pcmDetail.callUpNumber}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {pcmDetail.status}
+                      </p>
+                    </div>
+                  </div>
+                  <PcmExtraSections detail={pcmDetail} />
+                </>
+              )}
+              {!detailLoading && !pcmDetail && (
+                <p className="text-sm text-amber-800">
+                  Could not load full profile. Try again from Registry.
+                </p>
+              )}
+            </div>
+          </aside>
+        </div>
       )}
     </div>
   );
