@@ -21,7 +21,7 @@ model User {
   lgaCode          String?
   zoneCode         String?
   platoonCode      String?
-  /** Officer signature image */
+  /// Officer signature image (Cloudinary URL or data URI)
   signatureUrl     String?
   isActive         Boolean   @default(true)
   activationToken  String?
