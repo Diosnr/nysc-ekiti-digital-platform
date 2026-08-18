@@ -34,14 +34,21 @@ export async function POST(req: Request, { params }: Params) {
     /* optional body */
   }
 
-  const exitReason = String(body.exitReason ?? "").trim();
-  const exitDestinationState = String(body.exitDestinationState ?? "").trim();
-  const exitDestinationLga = String(body.exitDestinationLga ?? "").trim();
-  if (!exitReason) return jsonError("Reason for exit is required");
-  if (!exitDestinationState) return jsonError("Destination state is required");
-  if (!exitDestinationLga) return jsonError("Destination LGA is required");
+  // Prefer body, then values already on the PCM from exit approval
+  const exitReason =
+    String(body.exitReason ?? "").trim() ||
+    pcm.exitReason ||
+    "Camp exit — security checkout";
+  const exitDestinationState =
+    String(body.exitDestinationState ?? "").trim() ||
+    pcm.exitDestinationState ||
+    null;
+  const exitDestinationLga =
+    String(body.exitDestinationLga ?? "").trim() ||
+    pcm.exitDestinationLga ||
+    null;
 
-  let expectedReturnAt: Date | null = null;
+  let expectedReturnAt: Date | null = pcm.expectedReturnAt ?? null;
   if (body.expectedReturnAt) {
     const raw = String(body.expectedReturnAt).trim();
     if (raw) {
