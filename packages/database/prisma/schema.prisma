@@ -21,6 +21,8 @@ model User {
   lgaCode          String?
   zoneCode         String?
   platoonCode      String?
+  /** Officer signature image */
+  signatureUrl     String?
   isActive         Boolean   @default(true)
   activationToken  String?
   activationSentAt DateTime?
@@ -685,6 +687,7 @@ model MinuteSheet {
   body               String
   action             MinuteAction @default(FORWARD)
   attachmentUrlsJson String?
+  includePcmProfile  Boolean      @default(false)
   createdAt          DateTime     @default(now())
 
   @@index([fileId])

@@ -109,6 +109,7 @@ export async function POST(req: Request) {
   const photoUrls: string[] = Array.isArray(body.photoUrls)
     ? body.photoUrls.map(String).filter(Boolean)
     : [];
+  const includePcmProfile = Boolean(body.includePcmProfile);
   const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
   const nextToUserIds: string[] = Array.isArray(body.nextToUserIds)
     ? body.nextToUserIds.map(String).filter(Boolean)
@@ -198,6 +199,7 @@ export async function POST(req: Request) {
             attachmentUrlsJson: photoUrls.length
               ? JSON.stringify(photoUrls)
               : null,
+            includePcmProfile,
           },
         },
       },

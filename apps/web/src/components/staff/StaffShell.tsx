@@ -15,7 +15,11 @@ import { hasClinicAccess, isClinicOnly } from "@/lib/clinic-access";
 import { hasBankAccess, isBankOnly } from "@/lib/bank-access";
 
 type Me = {
-  user: { name: string | null; email: string };
+  user: {
+    name: string | null;
+    email: string;
+    signatureUrl?: string | null;
+  };
   roles: string[];
   permissions: string[];
 };
@@ -206,6 +210,22 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
           !pathname.startsWith("/staff/pro")
         ) {
           router.replace("/staff/pro");
+          return;
+        }
+        const roles = (data.roles ?? []) as string[];
+        const perms = (data.permissions ?? []) as string[];
+        const needsSig =
+          canAccessExitDesk(roles, perms) ||
+          perms.includes("camp:exeat") ||
+          perms.includes("*");
+        const hasSig = Boolean(data.user?.signatureUrl);
+        if (
+          needsSig &&
+          !hasSig &&
+          !pathname.startsWith("/staff/signature") &&
+          !pathname.startsWith("/staff/login")
+        ) {
+          router.replace("/staff/signature");
         }
       })
       .catch(() => router.replace("/staff/login"));

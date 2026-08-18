@@ -62,6 +62,7 @@ export async function loadUserAuthContext(userId: string) {
       platoonCode: user.platoonCode,
       post: user.post,
       rank: user.rank,
+      signatureUrl: user.signatureUrl ?? null,
     },
     roles,
     permissions: Array.from(permissionSet),

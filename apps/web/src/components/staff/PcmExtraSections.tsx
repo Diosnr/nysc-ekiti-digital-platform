@@ -57,6 +57,8 @@ export type PcmDetailExtra = {
       body: string;
       action: string;
       createdAt: string;
+      attachments?: string[];
+      includePcmProfile?: boolean;
     }>;
   }>;
   bankRegistration?: {
@@ -374,7 +376,7 @@ export function PcmExtraSections({
                     {f.currentHolderName ? ` · holder ${f.currentHolderName}` : ""}
                   </p>
                   {(f.minutes?.length ?? 0) > 0 && (
-                    <ul className="mt-2 max-h-32 space-y-1.5 overflow-y-auto border-t border-slate-100 pt-2">
+                    <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto border-t border-slate-100 pt-2">
                       {f.minutes!.map((m) => (
                         <li key={m.id} className="text-[11px] text-slate-600">
                           <span className="font-semibold text-slate-700">
@@ -383,11 +385,36 @@ export function PcmExtraSections({
                           · {m.fromName}
                           {m.toName ? ` → ${m.toName}` : ""} ·{" "}
                           {new Date(m.createdAt).toLocaleString()}
+                          {m.includePcmProfile ? (
+                            <span className="ml-1 rounded bg-sky-50 px-1 text-[10px] font-semibold text-sky-800">
+                              profile attached
+                            </span>
+                          ) : null}
                           {m.body ? (
                             <p className="mt-0.5 whitespace-pre-wrap text-slate-500">
                               {m.body}
                             </p>
                           ) : null}
+                          {(m.attachments?.length ?? 0) > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {m.attachments!.map((url, i) => (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <a
+                                  key={`${m.id}-att-${i}`}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block overflow-hidden rounded border border-slate-200"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`Attachment ${i + 1}`}
+                                    className="h-14 w-14 object-cover"
+                                  />
+                                </a>
+                              ))}
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>

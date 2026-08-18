@@ -78,6 +78,7 @@ export function CreateFilePanel({
   );
   const [reasonDetail, setReasonDetail] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [attachPcmProfile, setAttachPcmProfile] = useState(false);
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [selectedOfficerIds, setSelectedOfficerIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -211,6 +212,7 @@ export function CreateFilePanel({
                 nextToUserId,
                 nextToUserIds,
                 otherLabel: fileType === "OTHERS" ? otherLabel.trim() : undefined,
+                includePcmProfile: attachPcmProfile,
               }),
             });
       const data = await res.json().catch(() => ({}));
@@ -474,6 +476,20 @@ export function CreateFilePanel({
               </div>
             )}
           </div>
+          <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-nysc-green"
+              checked={attachPcmProfile}
+              onChange={(e) => setAttachPcmProfile(e.target.checked)}
+            />
+            <span>
+              <span className="font-semibold">Attach their full record</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                Recipient can open the member&apos;s comprehensive profile with download.
+              </span>
+            </span>
+          </label>
           <button
             type="submit"
             disabled={loading}

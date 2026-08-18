@@ -122,6 +122,8 @@ export async function GET(req: Request, { params }: Params) {
                   body: true,
                   action: true,
                   createdAt: true,
+                  attachmentUrlsJson: true,
+                  includePcmProfile: true,
                 },
               },
             },
@@ -147,12 +149,39 @@ export async function GET(req: Request, { params }: Params) {
 
   if (!pcm) return jsonError("PCM not found", 404);
 
+  function parseAtt(json: string | null | undefined): string[] {
+    if (!json) return [];
+    try {
+      const v = JSON.parse(json);
+      return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const electronicFiles = showEfile
+    ? (pcm.electronicFiles ?? []).map((f) => ({
+        ...f,
+        minutes: (f.minutes ?? []).map((m) => {
+          const { attachmentUrlsJson, includePcmProfile, ...rest } = m as {
+            attachmentUrlsJson?: string | null;
+            includePcmProfile?: boolean;
+          } & typeof m;
+          return {
+            ...rest,
+            attachments: parseAtt(attachmentUrlsJson),
+            includePcmProfile: Boolean(includePcmProfile),
+          };
+        }),
+      }))
+    : [];
+
   const payload = {
     ...pcm,
     ninRecords: showNin ? pcm.ninRecords ?? [] : [],
     bankRegistration: showBank ? pcm.bankRegistration ?? null : null,
     exitRequests: showEfile ? pcm.exitRequests ?? [] : [],
-    electronicFiles: showEfile ? pcm.electronicFiles ?? [] : [],
+    electronicFiles,
     clinicEncounters: showClinic ? pcm.clinicEncounters ?? [] : [],
     _meta: {
       canViewNin: showNin,

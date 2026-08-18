@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { StaffShell } from "@/components/staff/StaffShell";
 import { PcmPhoto } from "@/components/staff/PcmPhoto";
 import { CreateFilePanel } from "@/components/staff/CreateFilePanel";
@@ -46,6 +47,7 @@ type Minute = {
   action: string;
   createdAt: string;
   attachments?: string[];
+  includePcmProfile?: boolean;
   cc?: { id: string; name: string }[];
 };
 
@@ -171,6 +173,7 @@ export default function EFilingPage() {
   const [actOfficers, setActOfficers] = useState<Officer[]>([]);
   const [actNextTo, setActNextTo] = useState("");
   const [actNextIds, setActNextIds] = useState<string[]>([]);
+  const [attachPcmProfile, setAttachPcmProfile] = useState(false);
   /** Full-screen lightbox: list of image URLs + current index */
   const [lightbox, setLightbox] = useState<{
     urls: string[];
@@ -452,6 +455,10 @@ export default function EFilingPage() {
           note: note || undefined,
           nextToUserIds: ids.length ? ids : undefined,
           nextToUserId: ids[0] || undefined,
+          includePcmProfile:
+            decision === "forward" || decision === "return"
+              ? attachPcmProfile
+              : false,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -740,6 +747,15 @@ export default function EFilingPage() {
                   {selected.kind === "efile" && selected.subject && (
                     <p className="mt-1 text-sm text-slate-700">{selected.subject}</p>
                   )}
+                  {selected.pcm?.id &&
+                    (selected.minutes ?? []).some((m) => m.includePcmProfile) && (
+                      <Link
+                        href={`/staff/pcm/${selected.pcm.id}`}
+                        className="mt-3 inline-flex rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-900 hover:bg-sky-100"
+                      >
+                        Open full record →
+                      </Link>
+                    )}
                 </div>
               </div>
             </div>
@@ -936,6 +952,20 @@ export default function EFilingPage() {
                         })}
                       </div>
                     </div>
+                    <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-nysc-green"
+                        checked={attachPcmProfile}
+                        onChange={(e) => setAttachPcmProfile(e.target.checked)}
+                      />
+                      <span>
+                        <span className="font-semibold">Attach their full record</span>
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          Recipient gets Open full record (comprehensive profile + download).
+                        </span>
+                      </span>
+                    </label>
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"

@@ -74,6 +74,7 @@ export async function GET(req: Request, { params }: Params) {
             action: true,
             createdAt: true,
             attachmentUrlsJson: true,
+            includePcmProfile: true,
           },
         },
       },
@@ -124,6 +125,9 @@ export async function GET(req: Request, { params }: Params) {
           action: m.action,
           createdAt: m.createdAt,
           attachments: parseAttachments(m.attachmentUrlsJson),
+          includePcmProfile: Boolean(
+            (m as { includePcmProfile?: boolean }).includePcmProfile
+          ),
         })),
       },
     });
@@ -143,6 +147,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const body = await req.json().catch(() => ({}));
   const decision = String(body.decision ?? "").toLowerCase();
   const note = body.note ? String(body.note).trim() : "";
+  const includePcmProfile = Boolean(body.includePcmProfile);
   const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
   const nextToUserIds: string[] = Array.isArray(body.nextToUserIds)
     ? body.nextToUserIds.map(String).filter(Boolean)
@@ -266,6 +271,10 @@ export async function PATCH(req: Request, { params }: Params) {
           ccJson: ccList.length ? JSON.stringify(ccList) : null,
           body: minuteBody,
           action,
+          includePcmProfile:
+            decision === "forward" || decision === "return"
+              ? includePcmProfile
+              : false,
         },
       },
     },
