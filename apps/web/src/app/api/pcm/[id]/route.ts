@@ -159,14 +159,36 @@ export async function GET(req: Request, { params }: Params) {
     }
   }
 
+  type MinuteRow = {
+    id: string;
+    fromName: string;
+    toName: string | null;
+    body: string;
+    action: string;
+    createdAt: Date;
+    attachmentUrlsJson?: string | null;
+    includePcmProfile?: boolean;
+  };
+  type FileRow = {
+    id: string;
+    type: string;
+    subject: string;
+    status: string;
+    priority?: string | null;
+    groundCode?: string | null;
+    exitRequestId?: string | null;
+    openedByName?: string | null;
+    currentHolderName: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    minutes?: MinuteRow[];
+  };
+
   const electronicFiles = showEfile
-    ? (pcm.electronicFiles ?? []).map((f) => ({
+    ? ((pcm.electronicFiles ?? []) as unknown as FileRow[]).map((f) => ({
         ...f,
         minutes: (f.minutes ?? []).map((m) => {
-          const { attachmentUrlsJson, includePcmProfile, ...rest } = m as {
-            attachmentUrlsJson?: string | null;
-            includePcmProfile?: boolean;
-          } & typeof m;
+          const { attachmentUrlsJson, includePcmProfile, ...rest } = m;
           return {
             ...rest,
             attachments: parseAtt(attachmentUrlsJson),
