@@ -28,6 +28,31 @@ echo "cwd: $(pwd)"
 npx prisma generate --schema="$SCHEMA"
 
 if [ -n "${DATABASE_URL:-}" ]; then
+  # Commit efd43c2 changed CampExitRequest.ground from CampExitGround enum → String.
+  # prisma db push cannot alter a required enum column that already has rows.
+  # Cast in place (no data loss) when the live column is still the enum type.
+  echo "Ensuring CampExitRequest.ground is TEXT (safe enum→text cast if needed)…"
+  npx prisma db execute --schema="$SCHEMA" --stdin <<'SQL'
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'CampExitRequest'
+      AND column_name = 'ground'
+      AND udt_name = 'CampExitGround'
+  ) THEN
+    ALTER TABLE "CampExitRequest"
+      ALTER COLUMN "ground" TYPE TEXT
+      USING ("ground"::text);
+    RAISE NOTICE 'CampExitRequest.ground cast from CampExitGround to TEXT';
+  ELSE
+    RAISE NOTICE 'CampExitRequest.ground already TEXT (or table missing) — skip';
+  END IF;
+END $$;
+SQL
+
   echo "Syncing database schema (prisma db push)…"
   npx prisma db push --schema="$SCHEMA" --skip-generate --accept-data-loss=false
   echo "Database schema synced."
