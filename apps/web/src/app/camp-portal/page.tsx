@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getCmToken, clearCmToken, cmFetch, ensureCmSessionActive } from "@/lib/cm-api";
+import { clearCmToken, cmFetch, ensureCmSessionActive } from "@/lib/cm-api";
 
 type Pcm = {
   id: string;
@@ -28,16 +28,6 @@ const ITEMS = [
     href: "/camp-portal/account",
     label: "NIN / Account",
     desc: "Upload NIN card images",
-  },
-  {
-    href: "/camp-portal/e-file",
-    label: "E-file",
-    desc: "View status of your electronic files",
-  },
-  {
-    href: "/camp-portal/settings",
-    label: "Settings",
-    desc: "Change password and profile photo",
   },
 ];
 
@@ -69,11 +59,6 @@ export default function CampPortalDashboard() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  function logout() {
-    clearCmToken();
-    router.replace("/camp-portal/login");
-  }
-
   if (loading) {
     return (
       <main className="mx-auto max-w-xl px-4 py-16 text-center text-sm text-slate-500">
@@ -86,36 +71,27 @@ export default function CampPortalDashboard() {
 
   return (
     <main className="mx-auto max-w-xl px-4 py-12 sm:px-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex gap-3">
-          {pcm.photographUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={pcm.photographUrl}
-              alt=""
-              className="h-14 w-14 rounded-full object-cover border border-slate-200"
-            />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-500">
-              {pcm.fullName.slice(0, 1)}
-            </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">My Portal</h1>
-            <p className="mt-0.5 text-sm text-slate-600">{pcm.fullName}</p>
-            <p className="text-xs text-slate-500">
-              {pcm.callUpNumber}
-              {pcm.stateCode ? ` · ${pcm.stateCode}` : ""}
-            </p>
+      <div className="flex gap-3">
+        {pcm.photographUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={pcm.photographUrl}
+            alt=""
+            className="h-14 w-14 rounded-full object-cover border border-slate-200"
+          />
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-500">
+            {pcm.fullName.slice(0, 1)}
           </div>
+        )}
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">My Portal</h1>
+          <p className="mt-0.5 text-sm text-slate-600">{pcm.fullName}</p>
+          <p className="text-xs text-slate-500">
+            {pcm.callUpNumber}
+            {pcm.stateCode ? ` · ${pcm.stateCode}` : ""}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={logout}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Sign out
-        </button>
       </div>
 
       <div className="mt-8 space-y-3">
