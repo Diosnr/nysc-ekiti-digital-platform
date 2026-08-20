@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
-/** Public site chrome only — hidden on /staff/* */
+/** Public site chrome — hidden on /staff/*; footer hidden on /camp-portal/* */
 export function ConditionalChrome({
   children,
 }: {
@@ -12,6 +12,7 @@ export function ConditionalChrome({
 }) {
   const pathname = usePathname() || "";
   const isStaff = pathname.startsWith("/staff");
+  const isCampPortal = pathname.startsWith("/camp-portal");
 
   if (isStaff) {
     return <>{children}</>;
@@ -21,7 +22,7 @@ export function ConditionalChrome({
     <>
       <Header />
       <div className="flex-1">{children}</div>
-      <Footer />
+      {!isCampPortal && <Footer />}
     </>
   );
 }

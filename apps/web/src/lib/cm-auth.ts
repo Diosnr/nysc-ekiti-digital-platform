@@ -1,11 +1,12 @@
 /**
- * Corps Member (CM) portal auth — call-up / state code as both identifier and password.
+ * Corps Member (CM) portal auth — call-up / state code as identifier.
  * Separate from staff JWT; uses same access secret with type: "cm".
  */
 
 import { SignJWT, jwtVerify } from "jose";
 
-const CM_TTL = process.env.JWT_CM_EXPIRES_IN ?? "12h";
+/** Default session length — short so portal sessions time out. */
+const CM_TTL = process.env.JWT_CM_EXPIRES_IN ?? "30m";
 
 function getSecret(): Uint8Array {
   const raw = process.env.JWT_ACCESS_SECRET;

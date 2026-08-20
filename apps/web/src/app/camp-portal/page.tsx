@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getCmToken, clearCmToken, cmFetch } from "@/lib/cm-api";
+import { getCmToken, clearCmToken, cmFetch, ensureCmSessionActive } from "@/lib/cm-api";
 
 type Pcm = {
   id: string;
@@ -47,8 +47,8 @@ export default function CampPortalDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = getCmToken();
-    if (!token) {
+    if (!ensureCmSessionActive()) {
+      clearCmToken();
       router.replace("/camp-portal/login");
       return;
     }
@@ -101,10 +101,7 @@ export default function CampPortalDashboard() {
             </div>
           )}
           <div>
-            <Link href="/" className="text-sm font-medium text-nysc-green hover:underline">
-              ← Home
-            </Link>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">My Portal</h1>
+            <h1 className="text-2xl font-bold text-slate-900">My Portal</h1>
             <p className="mt-0.5 text-sm text-slate-600">{pcm.fullName}</p>
             <p className="text-xs text-slate-500">
               {pcm.callUpNumber}
