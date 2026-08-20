@@ -3,20 +3,17 @@ import { HomeNewsStrip } from "@/components/HomeNewsStrip";
 
 const campCards = [
   {
-    title: "Nursing / Pregnant women",
+    title: "Special Status",
     description:
-      "Declare nursing or pregnancy status and capture husband’s address for posting consideration.",
-    href: "/camp-portal/nursing-pregnant",
+      "Declare nursing, pregnancy, or related status for posting and welfare consideration.",
   },
   {
     title: "Skills",
     description: "Register up to three skills for camp and service-year programmes.",
-    href: "/camp-portal/skills",
   },
   {
-    title: "Account (NIN)",
+    title: "NIN / Account",
     description: "Upload NIN card images linked to your call-up number.",
-    href: "/camp-portal/account",
   },
 ];
 
@@ -38,10 +35,10 @@ export default function HomePage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/camp-portal/nursing-pregnant"
+              href="/camp-portal"
               className="rounded-md bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100"
             >
-              Open Camp Portal
+              My Portal
             </Link>
             <Link
               href="/staff/login"
@@ -55,23 +52,26 @@ export default function HomePage() {
 
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <div className="mb-10 max-w-2xl">
-          <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Camp Portal</h2>
+          <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">My Portal</h2>
           <p className="mt-3 text-slate-600">
-            Complete these forms with your call-up number so submissions stay linked to your record.
+            Sign in with your call-up number or state code to submit special status, skills, and NIN
+            details — all linked to your record.
           </p>
         </div>
         <div className="grid gap-6 sm:grid-cols-3">
           {campCards.map((item) => (
             <Link
-              key={item.href}
-              href={item.href}
+              key={item.title}
+              href="/camp-portal"
               className="group rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-nysc-green/40 hover:shadow-md"
             >
               <h3 className="text-lg font-semibold text-slate-900 group-hover:text-nysc-green">
                 {item.title}
               </h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.description}</p>
-              <span className="mt-4 inline-block text-sm font-medium text-nysc-green">Open →</span>
+              <span className="mt-4 inline-block text-sm font-medium text-nysc-green">
+                Sign in to continue →
+              </span>
             </Link>
           ))}
         </div>
@@ -101,8 +101,8 @@ export default function HomePage() {
                 Orientation camp
               </p>
               <p className="mt-3 leading-relaxed text-slate-700">
-                Find camp guidance, announcements, and FAQs in the information section of the footer.
-                Staff handle call-up intake at the secretariat / camp.
+                Find camp guidance, announcements, and FAQs in the information section. Staff handle
+                call-up intake at the secretariat / camp.
               </p>
               <Link
                 href="/orientation-camp"
