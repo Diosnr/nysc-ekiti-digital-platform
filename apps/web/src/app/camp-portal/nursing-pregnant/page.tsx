@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CallUpLookup } from "@/components/CallUpLookup";
+import { getCmToken, clearCmToken, cmFetch } from "@/lib/cm-api";
 import { NIGERIA_STATES } from "@/lib/nigeria";
 import { lettersOnly, phoneDigits } from "@/lib/sanitize";
 
@@ -18,9 +19,8 @@ const STATUS_OPTS = [
 type StatusKey = (typeof STATUS_OPTS)[number]["key"];
 
 export default function SpecialStatusPage() {
-  const [pcm, setPcm] = useState<{ callUpNumber: string; fullName: string } | null>(
-    null
-  );
+  const router = useRouter();
+  const [pcm, setPcm] = useState<{ callUpNumber: string; fullName: string } | null>(null);
   const [statuses, setStatuses] = useState<StatusKey[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
   const [lgas, setLgas] = useState<string[]>([]);
@@ -31,6 +31,7 @@ export default function SpecialStatusPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   const isSingleMother = statuses.includes("single_mother");
   const isMarriedWoman = statuses.includes("married_woman");
@@ -43,12 +44,8 @@ export default function SpecialStatusPage() {
     setStatuses((prev) => {
       const has = prev.includes(key);
       if (key === "single_mother") {
-        // Exclusive with Married Women
         if (has) return prev.filter((s) => s !== "single_mother");
-        return [
-          ...prev.filter((s) => s !== "married_woman"),
-          "single_mother",
-        ];
+        return [...prev.filter((s) => s !== "married_woman"), "single_mother"];
       }
       if (key === "married_woman") {
         if (has) return prev.filter((s) => s !== "married_woman");
@@ -58,6 +55,32 @@ export default function SpecialStatusPage() {
       return [...prev, key];
     });
   }
+
+  useEffect(() => {
+    const token = getCmToken();
+    if (!token) {
+      router.replace("/camp-portal/login");
+      return;
+    }
+    cmFetch("/api/camp-portal/auth/me")
+      .then(async (res) => {
+        if (!res.ok) {
+          clearCmToken();
+          router.replace("/camp-portal/login");
+          return;
+        }
+        const data = await res.json();
+        setPcm({
+          callUpNumber: data.pcm.callUpNumber,
+          fullName: data.pcm.fullName,
+        });
+      })
+      .catch(() => {
+        clearCmToken();
+        router.replace("/camp-portal/login");
+      })
+      .finally(() => setChecking(false));
+  }, [router]);
 
   useEffect(() => {
     if (!state) {
@@ -85,10 +108,7 @@ export default function SpecialStatusPage() {
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!pcm) {
-      setError("Search and select a registered call-up number first");
-      return;
-    }
+    if (!pcm) return;
     if (statuses.length === 0) {
       setError("Select at least one status");
       return;
@@ -103,8 +123,6 @@ export default function SpecialStatusPage() {
     setMsg(null);
     const fd = new FormData(form);
     const body = {
-      callUpNumber: pcm.callUpNumber,
-      fullName: pcm.fullName,
       statuses,
       husbandName:
         isSingleMother || !showHusband
@@ -122,9 +140,8 @@ export default function SpecialStatusPage() {
       return;
     }
     try {
-      const res = await fetch("/api/camp-portal/nursing-pregnant", {
+      const res = await cmFetch("/api/camp-portal/nursing-pregnant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
@@ -137,7 +154,6 @@ export default function SpecialStatusPage() {
       setStatuses([]);
       setHusbandName("");
       setPhone("");
-      setPcm(null);
     } catch {
       setError("Network error — please try again");
       setMsg(null);
@@ -146,16 +162,31 @@ export default function SpecialStatusPage() {
     }
   }
 
+  if (checking) {
+    return (
+      <main className="mx-auto max-w-xl px-4 py-16 text-center text-sm text-slate-500">
+        Loading…
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-xl px-4 py-12 sm:px-6">
-      <Link href="/" className="text-sm font-medium text-nysc-green hover:underline">
-        ← Home
+      <Link
+        href="/camp-portal"
+        className="text-sm font-medium text-nysc-green hover:underline"
+      >
+        ← My Portal
       </Link>
       <h1 className="mt-4 text-2xl font-bold text-slate-900">Special Status</h1>
       <p className="mt-2 text-sm text-slate-600">
         Married women, pregnant, nursing, or single mother — for posting and welfare.
-        Search your registered call-up first.
       </p>
+      {pcm && (
+        <p className="mt-1 text-xs text-slate-500">
+          Submitting as {pcm.fullName} ({pcm.callUpNumber})
+        </p>
+      )}
 
       {error && (
         <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -168,141 +199,137 @@ export default function SpecialStatusPage() {
         </p>
       )}
 
-      <div className="mt-8 space-y-4">
-        <CallUpLookup onFound={setPcm} onClear={() => setPcm(null)} />
-
-        {pcm && (
-          <form
-            onSubmit={onSubmit}
-            className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-          >
-            <fieldset>
-              <legend className="text-xs font-semibold uppercase text-slate-500">
-                Status * (select all that apply)
-              </legend>
-              <p className="mt-1 text-xs text-slate-500">
-                Single mother cannot be combined with Married Women.
-              </p>
-              <div className="mt-3 space-y-2">
-                {STATUS_OPTS.map((o) => (
-                  <label key={o.key} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={statuses.includes(o.key)}
-                      onChange={() => toggleStatus(o.key)}
-                    />
-                    {o.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            {!isSingleMother && showHusband && (
-              <div>
-                <label className="text-xs font-semibold uppercase text-slate-500">
-                  Husband’s full name
+      {pcm && (
+        <form
+          onSubmit={onSubmit}
+          className="mt-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+        >
+          <fieldset>
+            <legend className="text-xs font-semibold uppercase text-slate-500">
+              Status * (select all that apply)
+            </legend>
+            <p className="mt-1 text-xs text-slate-500">
+              Single mother cannot be combined with Married Women.
+            </p>
+            <div className="mt-3 space-y-2">
+              {STATUS_OPTS.map((o) => (
+                <label key={o.key} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={statuses.includes(o.key)}
+                    onChange={() => toggleStatus(o.key)}
+                  />
+                  {o.label}
                 </label>
-                <input
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={husbandName}
-                  onChange={(e) => setHusbandName(lettersOnly(e.target.value))}
-                />
-              </div>
-            )}
+              ))}
+            </div>
+          </fieldset>
 
+          {!isSingleMother && showHusband && (
             <div>
               <label className="text-xs font-semibold uppercase text-slate-500">
-                {isSingleMother ? "Address *" : "Husband’s address *"}
+                Husband’s full name
               </label>
-              <textarea
-                name="address"
-                required
-                rows={3}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="text-xs font-semibold uppercase text-slate-500">State *</label>
-                <select
-                  required
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                >
-                  {NIGERIA_STATES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold uppercase text-slate-500">LGA *</label>
-                <select
-                  required
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={lga}
-                  onChange={(e) => setLga(e.target.value)}
-                >
-                  <option value="">Select LGA…</option>
-                  {lgas.map((x) => (
-                    <option key={x} value={x}>
-                      {x}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {lga && communities.length > 0 && (
-              <div>
-                <label className="text-xs font-semibold uppercase text-slate-500">
-                  Community / town
-                </label>
-                <select
-                  name="residenceCommunity"
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  defaultValue=""
-                >
-                  <option value="">Select community…</option>
-                  {communities.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {lga && communities.length === 0 && (
-              <p className="text-xs text-slate-500">
-                No communities configured for this LGA yet. Super Admin can add them under
-                Staff → Communities (tied to state + LGA).
-              </p>
-            )}
-
-            <div>
-              <label className="text-xs font-semibold uppercase text-slate-500">Phone</label>
               <input
-                type="tel"
-                inputMode="tel"
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                value={phone}
-                onChange={(e) => setPhone(phoneDigits(e.target.value))}
+                value={husbandName}
+                onChange={(e) => setHusbandName(lettersOnly(e.target.value))}
               />
             </div>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading || statuses.length === 0}
-              className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {loading ? "Submitting…" : "Submit"}
-            </button>
-          </form>
-        )}
-      </div>
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              {isSingleMother ? "Address *" : "Husband’s address *"}
+            </label>
+            <textarea
+              name="address"
+              required
+              rows={3}
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold uppercase text-slate-500">State *</label>
+              <select
+                required
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+              >
+                {NIGERIA_STATES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase text-slate-500">LGA *</label>
+              <select
+                required
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={lga}
+                onChange={(e) => setLga(e.target.value)}
+              >
+                <option value="">Select LGA…</option>
+                {lgas.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {lga && communities.length > 0 && (
+            <div>
+              <label className="text-xs font-semibold uppercase text-slate-500">
+                Community / town
+              </label>
+              <select
+                name="residenceCommunity"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                defaultValue=""
+              >
+                <option value="">Select community…</option>
+                {communities.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {lga && communities.length === 0 && (
+            <p className="text-xs text-slate-500">
+              No communities configured for this LGA yet. Super Admin can add them under
+              Staff → Communities (tied to state + LGA).
+            </p>
+          )}
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">Phone</label>
+            <input
+              type="tel"
+              inputMode="tel"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={phone}
+              onChange={(e) => setPhone(phoneDigits(e.target.value))}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || statuses.length === 0}
+            className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {loading ? "Submitting…" : "Submit"}
+          </button>
+        </form>
+      )}
     </main>
   );
 }
