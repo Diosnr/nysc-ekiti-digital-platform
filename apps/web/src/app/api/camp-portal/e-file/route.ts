@@ -67,7 +67,7 @@ export async function GET(req: Request) {
 
 /**
  * CM opens an e-file on their own record only.
- * pcmId is always taken from the session — never from the request body.
+ * pcmId is always from the session. Optional nextToUserId(s) for routing.
  */
 export async function POST(req: Request) {
   const payload = await getCmBearerPayload(req.headers.get("authorization"));
@@ -84,8 +84,18 @@ export async function POST(req: Request) {
     const subject = String(body.subject ?? "").trim();
     const minute = body.minute ? String(body.minute).trim() : "";
 
+    const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
+    const nextToUserIds: string[] = Array.isArray(body.nextToUserIds)
+      ? body.nextToUserIds.map(String).filter(Boolean)
+      : nextToUserId
+        ? [nextToUserId]
+        : [];
+
     if (!subject) {
       return jsonError("Subject is required");
+    }
+    if (!nextToUserIds.length) {
+      return jsonError("Select at least one officer to send this file to");
     }
 
     const pcmId = payload.sub;
@@ -95,6 +105,36 @@ export async function POST(req: Request) {
     });
     if (!pcm) {
       return jsonError("Session invalid", 401);
+    }
+
+    const uniqueIds = [...new Set(nextToUserIds)];
+    const users = await prisma.user.findMany({
+      where: { id: { in: uniqueIds }, isActive: true },
+      select: { id: true, name: true, email: true, post: true },
+    });
+    if (!users.length) {
+      return jsonError("Selected officer(s) not found or inactive");
+    }
+
+    const byId = new Map(users.map((u) => [u.id, u]));
+    let primaryId: string | null = null;
+    let primaryName: string | null = null;
+    const ccList: { id: string; name: string }[] = [];
+
+    for (const id of uniqueIds) {
+      const u = byId.get(id);
+      if (!u) continue;
+      const name = u.name?.trim() || u.post || u.email;
+      if (!primaryId) {
+        primaryId = u.id;
+        primaryName = name;
+      } else {
+        ccList.push({ id: u.id, name });
+      }
+    }
+
+    if (!primaryId) {
+      return jsonError("Select at least one officer to send this file to");
     }
 
     const openerName = payload.fullName || pcm.fullName;
@@ -115,19 +155,20 @@ export async function POST(req: Request) {
           | "OTHERS",
         subject,
         priority: "NORMAL",
-        status: "PENDING",
+        status: "IN_TRANSIT",
         openedById: null,
         openedByName: openerName,
-        currentHolderId: null,
-        currentHolderName: null,
+        currentHolderId: primaryId,
+        currentHolderName: primaryName,
         minutes: {
           create: {
             fromUserId: null,
             fromName: openerName,
-            toUserId: null,
-            toName: null,
+            toUserId: primaryId,
+            toName: primaryName,
+            ccJson: ccList.length ? JSON.stringify(ccList) : null,
             body: minute || subject,
-            action: "DRAFT",
+            action: "FORWARD",
           },
         },
       },
@@ -136,6 +177,7 @@ export async function POST(req: Request) {
         type: true,
         subject: true,
         status: true,
+        currentHolderName: true,
         createdAt: true,
       },
     });
