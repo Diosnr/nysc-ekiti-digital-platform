@@ -1,11 +1,15 @@
 import { prisma } from "@/lib/db";
 import { jsonOk, jsonError } from "@/lib/api";
+import { getCmBearerPayload } from "@/lib/cm-auth";
 
 export async function POST(req: Request) {
   try {
+    const payload = await getCmBearerPayload(req.headers.get("authorization"));
+    if (!payload) {
+      return jsonError("Unauthorized — sign in to My Portal", 401);
+    }
+
     const body = await req.json();
-    const callUpNumber = String(body.callUpNumber ?? "").trim();
-    const fullName = String(body.fullName ?? "").trim();
     const address = String(body.address ?? body.husbandAddress ?? "").trim();
     const statuses: string[] = Array.isArray(body.statuses)
       ? body.statuses.map(String)
@@ -13,9 +17,6 @@ export async function POST(req: Request) {
         ? [String(body.status)]
         : [];
 
-    if (!callUpNumber || !fullName) {
-      return jsonError("Call-up number and full name are required");
-    }
     if (!address) return jsonError("Address is required");
     if (statuses.length === 0) return jsonError("Select at least one status");
 
@@ -25,11 +26,17 @@ export async function POST(req: Request) {
       return jsonError("Single mother cannot be combined with Married Women");
     }
 
-    const pcm = await prisma.pcm.findUnique({ where: { callUpNumber } });
+    const callUpNumber = payload.callUpNumber;
+    const fullName = payload.fullName;
+
+    const pcm = await prisma.pcm.findUnique({ where: { id: payload.sub } });
+    if (!pcm) {
+      return jsonError("Session invalid", 401);
+    }
 
     const row = await prisma.pcmFamilyStatus.create({
       data: {
-        pcmId: pcm?.id ?? null,
+        pcmId: pcm.id,
         callUpNumber,
         fullName,
         statusesJson: JSON.stringify(statuses),
@@ -48,14 +55,14 @@ export async function POST(req: Request) {
       },
     });
 
-    if (pcm && body.phone) {
+    if (body.phone) {
       await prisma.pcm.update({
         where: { id: pcm.id },
         data: { phone: String(body.phone).replace(/\D/g, "") || pcm.phone },
       });
     }
 
-    return jsonOk({ linked: Boolean(pcm), id: row.id, pcmId: pcm?.id });
+    return jsonOk({ linked: true, id: row.id, pcmId: pcm.id });
   } catch (e) {
     console.error(e);
     return jsonError(e instanceof Error ? e.message : "Failed", 400);

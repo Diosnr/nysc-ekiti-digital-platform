@@ -1,0 +1,111 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { setCmToken } from "@/lib/cm-api";
+
+export default function CmLoginPage() {
+  const router = useRouter();
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/camp-portal/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Login failed");
+        return;
+      }
+      setCmToken(data.token);
+      router.replace("/camp-portal");
+    } catch {
+      setError("Network error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <div className="mb-6 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-nysc-green text-sm font-bold text-white">
+            NY
+          </div>
+          <h1 className="mt-3 text-xl font-bold text-slate-900">My Portal</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Corps member login — use your call-up number or state code
+          </p>
+        </div>
+
+        {error && (
+          <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Call-up number or state code
+            </label>
+            <input
+              type="text"
+              required
+              autoComplete="username"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="e.g. NYSC/… or EK/26B/0367"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Password (same as above)
+            </label>
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Re-enter call-up or state code"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+
+        <p className="mt-4 text-center text-sm text-slate-600">
+          Can&apos;t access?{" "}
+          <Link href="/camp-portal/reset" className="font-medium text-nysc-green hover:underline">
+            Verify identity
+          </Link>
+        </p>
+
+        <p className="mt-6 text-center text-xs text-slate-500">
+          <Link href="/" className="text-nysc-green hover:underline">
+            ← Public site
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}

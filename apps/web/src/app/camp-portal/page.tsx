@@ -1,0 +1,113 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { getCmToken, clearCmToken, cmFetch } from "@/lib/cm-api";
+
+type Pcm = {
+  id: string;
+  callUpNumber: string;
+  fullName: string;
+  stateCode: string | null;
+};
+
+const ITEMS = [
+  {
+    href: "/camp-portal/nursing-pregnant",
+    label: "Special Status",
+    desc: "Pregnant, nursing, married, or single mother",
+  },
+  {
+    href: "/camp-portal/skills",
+    label: "Skills",
+    desc: "Declare up to 3 skills",
+  },
+  {
+    href: "/camp-portal/account",
+    label: "NIN / Account",
+    desc: "Upload NIN card images",
+  },
+];
+
+export default function CampPortalDashboard() {
+  const router = useRouter();
+  const [pcm, setPcm] = useState<Pcm | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = getCmToken();
+    if (!token) {
+      router.replace("/camp-portal/login");
+      return;
+    }
+    cmFetch("/api/camp-portal/auth/me")
+      .then(async (res) => {
+        if (!res.ok) {
+          clearCmToken();
+          router.replace("/camp-portal/login");
+          return;
+        }
+        const data = await res.json();
+        setPcm(data.pcm);
+      })
+      .catch(() => {
+        clearCmToken();
+        router.replace("/camp-portal/login");
+      })
+      .finally(() => setLoading(false));
+  }, [router]);
+
+  function logout() {
+    clearCmToken();
+    router.replace("/camp-portal/login");
+  }
+
+  if (loading) {
+    return (
+      <main className="mx-auto max-w-xl px-4 py-16 text-center text-sm text-slate-500">
+        Loading…
+      </main>
+    );
+  }
+
+  if (!pcm) return null;
+
+  return (
+    <main className="mx-auto max-w-xl px-4 py-12 sm:px-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link href="/" className="text-sm font-medium text-nysc-green hover:underline">
+            ← Home
+          </Link>
+          <h1 className="mt-4 text-2xl font-bold text-slate-900">My Portal</h1>
+          <p className="mt-1 text-sm text-slate-600">{pcm.fullName}</p>
+          <p className="text-xs text-slate-500">
+            {pcm.callUpNumber}
+            {pcm.stateCode ? ` · ${pcm.stateCode}` : ""}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={logout}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Sign out
+        </button>
+      </div>
+
+      <div className="mt-8 space-y-3">
+        {ITEMS.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-nysc-green hover:bg-green-50/40"
+          >
+            <div className="text-base font-semibold text-slate-900">{item.label}</div>
+            <div className="mt-0.5 text-sm text-slate-500">{item.desc}</div>
+          </Link>
+        ))}
+      </div>
+    </main>
+  );
+}
