@@ -2,7 +2,6 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { clearCmToken, cmFetch, ensureCmSessionActive } from "@/lib/cm-api";
 
 type FileRow = {
@@ -15,6 +14,14 @@ type FileRow = {
   currentHolderName: string | null;
   createdAt: string;
   latestMinute: { body: string; action: string; createdAt: string } | null;
+};
+
+type Officer = {
+  id: string;
+  name: string;
+  post: string | null;
+  rank: string | null;
+  roles: string[];
 };
 
 const TYPE_OPTS = [
@@ -48,6 +55,9 @@ export default function CmEfilePage() {
   const [type, setType] = useState("GENERAL");
   const [subject, setSubject] = useState("");
   const [minute, setMinute] = useState("");
+  const [officers, setOfficers] = useState<Officer[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [officerQ, setOfficerQ] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitMsg, setSubmitMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -82,12 +92,46 @@ export default function CmEfilePage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!showForm) return;
+    if (!ensureCmSessionActive()) return;
+    cmFetch("/api/camp-portal/e-file/officers")
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        setOfficers((data.officers ?? []) as Officer[]);
+      })
+      .catch(() => setOfficers([]));
+  }, [showForm]);
+
+  function toggleOfficer(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  const filteredOfficers = officerQ.trim()
+    ? officers.filter((o) => {
+        const q = officerQ.trim().toLowerCase();
+        return (
+          o.name.toLowerCase().includes(q) ||
+          (o.post && o.post.toLowerCase().includes(q)) ||
+          (o.rank && o.rank.toLowerCase().includes(q)) ||
+          o.roles.some((r) => r.toLowerCase().includes(q))
+        );
+      })
+    : officers;
+
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setSubmitError(null);
     setSubmitMsg(null);
     if (!subject.trim()) {
       setSubmitError("Subject is required");
+      return;
+    }
+    if (!selectedIds.length) {
+      setSubmitError("Select at least one officer to send this file to");
       return;
     }
     setSubmitting(true);
@@ -98,6 +142,8 @@ export default function CmEfilePage() {
           type,
           subject: subject.trim(),
           minute: minute.trim() || undefined,
+          nextToUserIds: selectedIds,
+          nextToUserId: selectedIds[0],
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -105,10 +151,16 @@ export default function CmEfilePage() {
         setSubmitError(data.error ?? "Could not create file");
         return;
       }
-      setSubmitMsg("File opened successfully.");
+      setSubmitMsg(
+        data.file?.currentHolderName
+          ? `File sent to ${data.file.currentHolderName}.`
+          : "File opened successfully."
+      );
       setSubject("");
       setMinute("");
       setType("GENERAL");
+      setSelectedIds([]);
+      setOfficerQ("");
       setShowForm(false);
       load();
     } catch {
@@ -124,7 +176,7 @@ export default function CmEfilePage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">E-file</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Open a file on your own record and track status. Files are always linked to you only.
+            Open a file on your record, choose who receives it, and track status.
           </p>
         </div>
         <button
@@ -172,22 +224,71 @@ export default function CmEfilePage() {
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">Details</label>
             <textarea
-              rows={4}
+              rows={3}
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={minute}
               onChange={(e) => setMinute(e.target.value)}
-              placeholder="Optional note for staff"
+              placeholder="Optional note for the officer"
             />
           </div>
-          {submitError && (
-            <p className="text-sm text-red-600">{submitError}</p>
-          )}
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Send to *
+            </label>
+            <input
+              type="search"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="Search by name, post or role"
+              value={officerQ}
+              onChange={(e) => setOfficerQ(e.target.value)}
+            />
+            <div className="mt-2 max-h-52 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+              {filteredOfficers.length === 0 && (
+                <p className="px-2 py-1 text-xs text-slate-500">
+                  {officers.length === 0 ? "Loading officers…" : "No matches"}
+                </p>
+              )}
+              {filteredOfficers.map((o) => {
+                const checked = selectedIds.includes(o.id);
+                const meta = [o.post, o.roles[0]].filter(Boolean).join(" · ");
+                return (
+                  <label
+                    key={o.id}
+                    className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50 ${
+                      checked ? "bg-emerald-50" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleOfficer(o.id)}
+                      className="h-4 w-4 rounded border-slate-300 text-nysc-green"
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      {o.name}
+                      {meta ? (
+                        <span className="text-slate-500"> · {meta}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {selectedIds.length > 0 && (
+              <p className="mt-1 text-xs text-slate-500">
+                {selectedIds.length} selected · first is primary holder; others are CC
+              </p>
+            )}
+          </div>
+
+          {submitError && <p className="text-sm text-red-600">{submitError}</p>}
           <button
             type="submit"
             disabled={submitting}
             className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {submitting ? "Submitting…" : "Open file"}
+            {submitting ? "Sending…" : "Send file"}
           </button>
         </form>
       )}
