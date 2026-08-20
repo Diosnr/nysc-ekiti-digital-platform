@@ -3,9 +3,11 @@ import { jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { rateLimit } from "@/lib/rate-limit";
 import { signCmToken } from "@/lib/cm-auth";
 import { normalizeStateCode } from "@/lib/state-code";
+import { verifyPassword } from "@/lib/auth-server";
 
 /**
- * CM login: identifier (call-up or state code) used as both username and password.
+ * CM login: identifier = call-up or state code.
+ * Password: custom portal password if set; otherwise same as identifier.
  */
 export async function POST(req: Request) {
   try {
@@ -16,12 +18,7 @@ export async function POST(req: Request) {
     const ip = meta.ip ?? "unknown";
 
     if (!identifier || !password) {
-      return jsonError("Call-up number or state code is required for both fields");
-    }
-
-    // Must be identical (call-up / state code acts as password)
-    if (identifier.toUpperCase() !== password.toUpperCase()) {
-      return jsonError("Invalid credentials", 401);
+      return jsonError("Call-up number or state code is required");
     }
 
     const limited = rateLimit(`cm-login:${ip}:${identifier.toLowerCase()}`, 10, 15 * 60 * 1000);
@@ -50,10 +47,24 @@ export async function POST(req: Request) {
         fullName: true,
         stateCode: true,
         phone: true,
+        portalPasswordHash: true,
+        photographUrl: true,
       },
     });
 
     if (!pcm) {
+      return jsonError("Invalid credentials", 401);
+    }
+
+    let valid = false;
+    if (pcm.portalPasswordHash) {
+      valid = await verifyPassword(password, pcm.portalPasswordHash);
+    } else {
+      // Default: call-up / state code as password
+      valid = identifier.toUpperCase() === password.toUpperCase();
+    }
+
+    if (!valid) {
       return jsonError("Invalid credentials", 401);
     }
 
@@ -71,6 +82,7 @@ export async function POST(req: Request) {
         callUpNumber: pcm.callUpNumber,
         fullName: pcm.fullName,
         stateCode: pcm.stateCode,
+        photographUrl: pcm.photographUrl,
       },
     });
   } catch (e) {

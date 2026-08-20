@@ -10,6 +10,7 @@ type Pcm = {
   callUpNumber: string;
   fullName: string;
   stateCode: string | null;
+  photographUrl?: string | null;
 };
 
 const ITEMS = [
@@ -27,6 +28,16 @@ const ITEMS = [
     href: "/camp-portal/account",
     label: "NIN / Account",
     desc: "Upload NIN card images",
+  },
+  {
+    href: "/camp-portal/e-file",
+    label: "E-file",
+    desc: "View status of your electronic files",
+  },
+  {
+    href: "/camp-portal/settings",
+    label: "Settings",
+    desc: "Change password and profile photo",
   },
 ];
 
@@ -76,16 +87,30 @@ export default function CampPortalDashboard() {
   return (
     <main className="mx-auto max-w-xl px-4 py-12 sm:px-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <Link href="/" className="text-sm font-medium text-nysc-green hover:underline">
-            ← Home
-          </Link>
-          <h1 className="mt-4 text-2xl font-bold text-slate-900">My Portal</h1>
-          <p className="mt-1 text-sm text-slate-600">{pcm.fullName}</p>
-          <p className="text-xs text-slate-500">
-            {pcm.callUpNumber}
-            {pcm.stateCode ? ` · ${pcm.stateCode}` : ""}
-          </p>
+        <div className="flex gap-3">
+          {pcm.photographUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={pcm.photographUrl}
+              alt=""
+              className="h-14 w-14 rounded-full object-cover border border-slate-200"
+            />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-500">
+              {pcm.fullName.slice(0, 1)}
+            </div>
+          )}
+          <div>
+            <Link href="/" className="text-sm font-medium text-nysc-green hover:underline">
+              ← Home
+            </Link>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">My Portal</h1>
+            <p className="mt-0.5 text-sm text-slate-600">{pcm.fullName}</p>
+            <p className="text-xs text-slate-500">
+              {pcm.callUpNumber}
+              {pcm.stateCode ? ` · ${pcm.stateCode}` : ""}
+            </p>
+          </div>
         </div>
         <button
           type="button"
