@@ -13,21 +13,21 @@ export function Footer() {
             </p>
           </div>
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wider text-white">Camp Portal</p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-white">Corps members</p>
             <ul className="mt-3 space-y-2 text-sm">
               <li>
-                <Link href="/camp-portal/nursing-pregnant" className="hover:text-white">
-                  Nursing / Pregnant women
+                <Link href="/camp-portal" className="hover:text-white">
+                  My Portal
                 </Link>
               </li>
               <li>
-                <Link href="/camp-portal/skills" className="hover:text-white">
-                  Skills
+                <Link href="/orientation-camp" className="hover:text-white">
+                  Orientation Camp
                 </Link>
               </li>
               <li>
-                <Link href="/camp-portal/account" className="hover:text-white">
-                  Account (NIN)
+                <Link href="/faqs" className="hover:text-white">
+                  FAQs
                 </Link>
               </li>
             </ul>
@@ -38,11 +38,6 @@ export function Footer() {
               <li>
                 <Link href="/about" className="hover:text-white">
                   About NYSC Ekiti
-                </Link>
-              </li>
-              <li>
-                <Link href="/orientation-camp" className="hover:text-white">
-                  Orientation Camp
                 </Link>
               </li>
               <li>
@@ -70,11 +65,6 @@ export function Footer() {
                   Gallery
                 </Link>
               </li>
-              <li>
-                <Link href="/faqs" className="hover:text-white">
-                  FAQs
-                </Link>
-              </li>
             </ul>
           </div>
           <div>
@@ -85,11 +75,6 @@ export function Footer() {
               <li>
                 <Link href="/contact" className="hover:text-white">
                   Contact form
-                </Link>
-              </li>
-              <li>
-                <Link href="/staff/login" className="hover:text-white">
-                  Staff Login
                 </Link>
               </li>
             </ul>
