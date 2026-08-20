@@ -17,6 +17,8 @@ export async function GET(req: Request) {
       stateCode: true,
       phone: true,
       gender: true,
+      photographUrl: true,
+      portalPasswordHash: true,
     },
   });
 
@@ -24,5 +26,16 @@ export async function GET(req: Request) {
     return jsonError("Session invalid", 401);
   }
 
-  return jsonOk({ pcm });
+  return jsonOk({
+    pcm: {
+      id: pcm.id,
+      callUpNumber: pcm.callUpNumber,
+      fullName: pcm.fullName,
+      stateCode: pcm.stateCode,
+      phone: pcm.phone,
+      gender: pcm.gender,
+      photographUrl: pcm.photographUrl,
+      hasCustomPassword: Boolean(pcm.portalPasswordHash),
+    },
+  });
 }
