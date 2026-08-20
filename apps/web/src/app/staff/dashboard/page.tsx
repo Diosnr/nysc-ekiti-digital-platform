@@ -145,6 +145,15 @@ export default function StaffDashboardPage() {
         router.replace("/staff/security");
         return;
       }
+      const isLinePlatoonOfficer =
+        roles.some((r) => r.toLowerCase().includes("platoon officer")) &&
+        !roles.some((r) => r.toLowerCase().includes("head of platoon")) &&
+        !roles.some((r) => r.toLowerCase() === "super admin") &&
+        !perms.includes("*");
+      if (isLinePlatoonOfficer) {
+        router.replace("/staff/platoon");
+        return;
+      }
       if (isExecutive(roles, perms)) {
         setOvLoading(true);
         staffFetch("/api/analytics/camp-overview")

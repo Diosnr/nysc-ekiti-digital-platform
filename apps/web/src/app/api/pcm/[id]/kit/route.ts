@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
+import { loadUserAuthContext } from "@/lib/auth-server";
+import { canAccessPlatoonPcm } from "@/lib/scope";
 import { writeAudit } from "@/lib/audit";
 
 type Params = { params: Promise<{ id: string }> };
@@ -14,7 +16,9 @@ const DEFAULT_KIT: KitLine[] = [
   { name: "Khaki uniform", size: null, qty: 1 },
   { name: "White vest", size: null, qty: 1 },
   { name: "Jungle boots", size: null, qty: 1 },
-  { name: "Cap / beret", size: null, qty: 1 },
+  { name: "Cap", size: null, qty: 1 },
+  { name: "White socks", size: null, qty: 1 },
+  { name: "Tennis shoes", size: null, qty: 1 },
   { name: "Belt", size: null, qty: 1 },
   { name: "NYSC ID card holder", size: null, qty: 1 },
 ];
@@ -105,6 +109,17 @@ export async function GET(req: Request, { params }: Params) {
     },
   });
   if (!pcm) return jsonError("Not found", 404);
+  const ctx = await loadUserAuthContext(auth.payload.sub);
+  if (
+    !canAccessPlatoonPcm(
+      auth.payload.roles,
+      auth.payload.permissions,
+      ctx?.user.platoonCode,
+      pcm.platoonCode
+    )
+  ) {
+    return jsonError("Member is outside your platoon", 403);
+  }
 
   const parsed = parseKitPayload(pcm.kitItemsJson);
   return jsonOk({
@@ -152,6 +167,17 @@ export async function POST(req: Request, { params }: Params) {
 
   const pcm = await prisma.pcm.findUnique({ where: { id } });
   if (!pcm) return jsonError("Not found", 404);
+  const ctx = await loadUserAuthContext(auth.payload.sub);
+  if (
+    !canAccessPlatoonPcm(
+      auth.payload.roles,
+      auth.payload.permissions,
+      ctx?.user.platoonCode,
+      pcm.platoonCode
+    )
+  ) {
+    return jsonError("Member is outside your platoon", 403);
+  }
 
   // Domain rule: kit after platoon assignment (super may force)
   if (!pcm.platoonCode && !isSuper(auth.payload.roles, auth.payload.permissions) && !force) {

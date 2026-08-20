@@ -31,6 +31,7 @@ export default function CampAddressesAdminPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [lgas, setLgas] = useState<string[]>([]);
 
   async function load() {
     setError(null);
@@ -46,6 +47,30 @@ export default function CampAddressesAdminPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    const state = form.state.trim();
+    if (!state) {
+      setLgas([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLgas([]);
+    fetch(`/api/geo/lgas?state=${encodeURIComponent(state)}`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setLgas(data.lgas ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setLgas([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form.state]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -147,7 +172,7 @@ export default function CampAddressesAdminPage() {
             <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={form.state}
-              onChange={(e) => setForm({ ...form, state: e.target.value })}
+              onChange={(e) => setForm({ ...form, state: e.target.value, lga: "" })}
             >
               <option value="">—</option>
               {NIGERIA_STATES.map((s) => (
@@ -159,11 +184,19 @@ export default function CampAddressesAdminPage() {
           </div>
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">LGA</label>
-            <input
+            <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={form.lga}
               onChange={(e) => setForm({ ...form, lga: e.target.value })}
-            />
+              disabled={!form.state || lgas.length === 0}
+            >
+              <option value="">{form.state ? "Select LGA" : "Select state first"}</option>
+              {lgas.map((lga) => (
+                <option key={lga} value={lga}>
+                  {lga}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">Sort order</label>

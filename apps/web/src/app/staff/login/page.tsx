@@ -12,6 +12,13 @@ function homeForRoles(roles: string[]): string {
   if (roles.includes("Security Officer") && !roles.includes("Super Admin")) {
     return "/staff/security/checkin";
   }
+  if (
+    roles.some((r) => r.toLowerCase().includes("platoon officer")) &&
+    !roles.some((r) => r.toLowerCase().includes("head of platoon")) &&
+    !roles.some((r) => r.toLowerCase() === "super admin")
+  ) {
+    return "/staff/platoon";
+  }
   return "/staff/dashboard";
 }
 

@@ -167,7 +167,7 @@ export default function EFilingPage() {
     EXIT_GROUNDS.map((g) => ({
       code: g.value,
       label: g.label,
-      requiresClinic: g.value === "MEDICAL" || g.value === "HEALTH",
+      requiresClinic: g.requiresClinic,
     }))
   );
   const [actOfficers, setActOfficers] = useState<Officer[]>([]);

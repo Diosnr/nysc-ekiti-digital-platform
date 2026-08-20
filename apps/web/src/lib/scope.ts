@@ -10,6 +10,7 @@
  */
 
 import type { AccessTokenPayload } from "@nysc/auth";
+import { isPlatoonOfficerRole } from "@/lib/platoon-tenure";
 
 export type GeoScope = {
   lgaCode?: string;
@@ -62,4 +63,37 @@ export function pcmScopeWhere(scope: GeoScope): Record<string, unknown> {
   if (scope.lgaCode) return { lgaCode: scope.lgaCode };
   if (scope.zoneCode) return { zoneCode: scope.zoneCode };
   return { id: "__none__" };
+}
+
+export function isLinePlatoonOfficer(
+  roles: string[],
+  permissions: string[]
+): boolean {
+  return (
+    isPlatoonOfficerRole(roles) &&
+    !roles.some((r) => r.toLowerCase().includes("head of platoon")) &&
+    !permissions.includes("*") &&
+    !roles.some((r) => r.toLowerCase() === "super admin")
+  );
+}
+
+export function platoonScopeWhere(
+  roles: string[],
+  permissions: string[],
+  platoonCode?: string | null
+): Record<string, unknown> {
+  if (!isLinePlatoonOfficer(roles, permissions)) return {};
+  return platoonCode ? { platoonCode } : { id: "__none__" };
+}
+
+export function canAccessPlatoonPcm(
+  roles: string[],
+  permissions: string[],
+  officerPlatoonCode: string | null | undefined,
+  pcmPlatoonCode: string | null | undefined
+): boolean {
+  return (
+    !isLinePlatoonOfficer(roles, permissions) ||
+    Boolean(officerPlatoonCode && pcmPlatoonCode === officerPlatoonCode)
+  );
 }

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, jsonOk, jsonError } from "@/lib/api";
 import { loadUserAuthContext } from "@/lib/auth-server";
-import { isPlatoonOfficerRole } from "@/lib/platoon-tenure";
+import { isLinePlatoonOfficer } from "@/lib/scope";
 import { isValidStateCode } from "@/lib/state-code";
 
 export async function GET(req: Request) {
@@ -35,10 +35,7 @@ export async function GET(req: Request) {
   const filters: Record<string, unknown>[] = [];
 
   const isLinePlatoon =
-    ctx &&
-    isPlatoonOfficerRole(ctx.roles) &&
-    !ctx.roles.some((r) => r.toLowerCase().includes("head of platoon")) &&
-    !ctx.permissions.includes("*");
+    ctx && isLinePlatoonOfficer(ctx.roles, ctx.permissions);
 
   if (isLinePlatoon) {
     if (!ctx.user.platoonCode) {

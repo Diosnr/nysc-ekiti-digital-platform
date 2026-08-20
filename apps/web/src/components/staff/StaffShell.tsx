@@ -205,6 +205,17 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
         const data = await res.json();
         setMe(data);
         loaded.current = true;
+        const roles = (data.roles ?? []) as string[];
+        const perms = (data.permissions ?? []) as string[];
+        const isLinePlatoonOfficer =
+          roles.some((r) => r.toLowerCase().includes("platoon officer")) &&
+          !roles.some((r) => r.toLowerCase().includes("head of platoon")) &&
+          !roles.some((r) => r.toLowerCase() === "super admin") &&
+          !perms.includes("*");
+        if (isLinePlatoonOfficer && !pathname.startsWith("/staff/platoon")) {
+          router.replace("/staff/platoon");
+          return;
+        }
         if (
           isProOnly(data.roles ?? [], data.permissions ?? []) &&
           !pathname.startsWith("/staff/pro")
@@ -212,8 +223,6 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
           router.replace("/staff/pro");
           return;
         }
-        const roles = (data.roles ?? []) as string[];
-        const perms = (data.permissions ?? []) as string[];
         const needsSig =
           canAccessExitDesk(roles, perms) ||
           perms.includes("camp:exeat") ||
@@ -251,6 +260,10 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
   const isSecurity = roles.includes("Security Officer");
   const isSuper =
     roles.some((r) => r.toLowerCase() === "super admin") || perms.includes("*");
+  const isLinePlatoonOfficer =
+    roles.some((r) => r.toLowerCase().includes("platoon officer")) &&
+    !roles.some((r) => r.toLowerCase().includes("head of platoon")) &&
+    !isSuper;
   const proOnly = isProOnly(roles, perms);
   const accOnly = isAccommodationOnly(roles, perms);
   const clinicOnly = isClinicOnly(roles, perms);
@@ -322,6 +335,7 @@ function StaffShellInner({ children }: { children: React.ReactNode }) {
     );
 
   const visible = nav.filter((n) => {
+    if (isLinePlatoonOfficer) return n.href === "/staff/platoon";
     if (proOnly) return n.href === "/staff/pro";
     if (accOnly) {
       return n.href === "/staff/dashboard" || n.href === "/staff/accommodation";

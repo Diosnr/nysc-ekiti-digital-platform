@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, jsonOk, jsonError, clientMeta } from "@/lib/api";
 import { loadUserAuthContext } from "@/lib/auth-server";
-import { resolveGeoScope, pcmScopeWhere } from "@/lib/scope";
+import {
+  resolveGeoScope,
+  pcmScopeWhere,
+  platoonScopeWhere,
+} from "@/lib/scope";
 import { writeAudit } from "@/lib/audit";
 import { canAccessExitDesk } from "@/lib/exit-workflow";
 
@@ -61,7 +65,11 @@ export async function GET(req: Request, { params }: Params) {
 
   const pcm = await prisma.pcm.findFirst({
     where: {
-      AND: [{ id }, pcmScopeWhere(scope)],
+      AND: [
+        { id },
+        pcmScopeWhere(scope),
+        platoonScopeWhere(auth.payload.roles, auth.payload.permissions, ctx?.user.platoonCode),
+      ],
     },
     include: {
       verifications: { orderBy: { verifiedAt: "desc" }, take: 5 },

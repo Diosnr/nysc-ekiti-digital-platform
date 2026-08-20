@@ -59,7 +59,9 @@ const DEFAULT_ITEMS = [
   "Khaki uniform",
   "White vest",
   "Jungle boots",
-  "Cap / beret",
+  "Cap",
+  "White socks",
+  "Tennis shoes",
   "Belt",
   "NYSC ID card holder",
 ];

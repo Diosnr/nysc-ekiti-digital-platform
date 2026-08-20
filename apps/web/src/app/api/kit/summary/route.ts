@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { requireAuth, jsonOk, jsonError } from "@/lib/api";
+import { loadUserAuthContext } from "@/lib/auth-server";
+import { isLinePlatoonOfficer } from "@/lib/scope";
 
 function canIssueKit(roles: string[], permissions: string[]) {
   if (permissions.includes("*") || permissions.includes("kit:issue")) return true;
@@ -24,7 +26,13 @@ export async function GET(req: Request) {
       notIn: ["CHECKED_OUT", "CAMP_EXITED", "CLEARED", "COMPLETED"],
     },
   };
-  if (platoon) baseWhere.platoonCode = platoon;
+  const ctx = await loadUserAuthContext(auth.payload.sub);
+  const lineOfficer = isLinePlatoonOfficer(
+    auth.payload.roles,
+    auth.payload.permissions
+  );
+  const scopedPlatoon = lineOfficer ? ctx?.user.platoonCode ?? "__none__" : platoon;
+  if (scopedPlatoon) baseWhere.platoonCode = scopedPlatoon;
 
   const [issued, notIssued, withPlatoonNoKit, totalActive] = await Promise.all([
     prisma.pcm.count({
