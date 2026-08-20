@@ -250,6 +250,8 @@ model Pcm {
   phone                 String?
   email                 String?
   photographUrl         String?
+  /// Optional My Portal password (bcrypt). When null, login accepts call-up/state code as password.
+  portalPasswordHash    String?
   deploymentState       String?
   stateCode             String?
   campAddress           String?
