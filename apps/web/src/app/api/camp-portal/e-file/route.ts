@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { jsonOk, jsonError } from "@/lib/api";
 import { getCmBearerPayload } from "@/lib/cm-auth";
+import { uploadDataUriToCloudinary } from "@/lib/cloudinary";
 
 const CM_FILE_TYPES = [
   "GENERAL",
@@ -14,6 +15,19 @@ const CM_FILE_TYPES = [
   "QUERY",
   "OTHERS",
 ] as const;
+
+const TYPE_LABELS: Record<string, string> = {
+  GENERAL: "General",
+  LEAVE: "Leave",
+  SICK_LEAVE: "Sick leave",
+  CASUAL_LEAVE: "Casual leave",
+  MATERNITY_LEAVE: "Maternity leave",
+  CONVOCATION_LEAVE: "Convocation leave",
+  RELOCATION: "Relocation",
+  REPOSTING: "Reposting",
+  QUERY: "Query / response",
+  OTHERS: "Others",
+};
 
 /** List electronic files for the logged-in corps member only. */
 export async function GET(req: Request) {
@@ -40,7 +54,7 @@ export async function GET(req: Request) {
         minutes: {
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { body: true, action: true, createdAt: true },
+          select: { body: true, action: true, createdAt: true, attachmentUrlsJson: true },
         },
       },
     });
@@ -56,7 +70,16 @@ export async function GET(req: Request) {
         currentHolderName: f.currentHolderName,
         createdAt: f.createdAt,
         updatedAt: f.updatedAt,
-        latestMinute: f.minutes[0] ?? null,
+        latestMinute: f.minutes[0]
+          ? {
+              body: f.minutes[0].body,
+              action: f.minutes[0].action,
+              createdAt: f.minutes[0].createdAt,
+              attachmentUrls: f.minutes[0].attachmentUrlsJson
+                ? (JSON.parse(f.minutes[0].attachmentUrlsJson) as string[])
+                : [],
+            }
+          : null,
       })),
     });
   } catch (e) {
@@ -67,7 +90,7 @@ export async function GET(req: Request) {
 
 /**
  * CM opens an e-file on their own record only.
- * pcmId is always from the session. Optional nextToUserId(s) for routing.
+ * Subject required only when type is OTHERS; otherwise derived from type label.
  */
 export async function POST(req: Request) {
   const payload = await getCmBearerPayload(req.headers.get("authorization"));
@@ -81,7 +104,7 @@ export async function POST(req: Request) {
     const type = CM_FILE_TYPES.includes(typeRaw as (typeof CM_FILE_TYPES)[number])
       ? (typeRaw as (typeof CM_FILE_TYPES)[number])
       : "GENERAL";
-    const subject = String(body.subject ?? "").trim();
+    const otherSubject = String(body.subject ?? "").trim();
     const minute = body.minute ? String(body.minute).trim() : "";
 
     const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
@@ -91,8 +114,14 @@ export async function POST(req: Request) {
         ? [nextToUserId]
         : [];
 
-    if (!subject) {
-      return jsonError("Subject is required");
+    const rawPhotos: string[] = Array.isArray(body.photoUrls)
+      ? body.photoUrls.map(String).filter(Boolean)
+      : Array.isArray(body.photoDataUrls)
+        ? body.photoDataUrls.map(String).filter(Boolean)
+        : [];
+
+    if (type === "OTHERS" && !otherSubject) {
+      return jsonError("Please describe the file type for Others");
     }
     if (!nextToUserIds.length) {
       return jsonError("Select at least one officer to send this file to");
@@ -101,7 +130,7 @@ export async function POST(req: Request) {
     const pcmId = payload.sub;
     const pcm = await prisma.pcm.findUnique({
       where: { id: pcmId },
-      select: { id: true, fullName: true },
+      select: { id: true, fullName: true, callUpNumber: true },
     });
     if (!pcm) {
       return jsonError("Session invalid", 401);
@@ -137,6 +166,25 @@ export async function POST(req: Request) {
       return jsonError("Select at least one officer to send this file to");
     }
 
+    const subject =
+      type === "OTHERS"
+        ? otherSubject
+        : TYPE_LABELS[type] || type;
+
+    const photoUrls: string[] = [];
+    for (let i = 0; i < Math.min(rawPhotos.length, 6); i++) {
+      const raw = rawPhotos[i];
+      if (raw.startsWith("data:image")) {
+        const url = await uploadDataUriToCloudinary(
+          raw,
+          `efile_${pcm.callUpNumber}_${i}`
+        );
+        photoUrls.push(url || raw);
+      } else if (/^https?:\/\//i.test(raw)) {
+        photoUrls.push(raw);
+      }
+    }
+
     const openerName = payload.fullName || pcm.fullName;
 
     const file = await prisma.electronicFile.create({
@@ -169,6 +217,9 @@ export async function POST(req: Request) {
             ccJson: ccList.length ? JSON.stringify(ccList) : null,
             body: minute || subject,
             action: "FORWARD",
+            attachmentUrlsJson: photoUrls.length
+              ? JSON.stringify(photoUrls)
+              : null,
           },
         },
       },

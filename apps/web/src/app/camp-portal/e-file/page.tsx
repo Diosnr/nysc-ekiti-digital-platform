@@ -13,7 +13,12 @@ type FileRow = {
   openedByName: string | null;
   currentHolderName: string | null;
   createdAt: string;
-  latestMinute: { body: string; action: string; createdAt: string } | null;
+  latestMinute: {
+    body: string;
+    action: string;
+    createdAt: string;
+    attachmentUrls?: string[];
+  } | null;
 };
 
 type Officer = {
@@ -45,6 +50,22 @@ function statusStyle(status: string) {
   return "bg-amber-50 text-amber-900 border-amber-200";
 }
 
+function filesToDataUrls(files: FileList | null): Promise<string[]> {
+  if (!files?.length) return Promise.resolve([]);
+  const list = Array.from(files).slice(0, 6);
+  return Promise.all(
+    list.map(
+      (file) =>
+        new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result || ""));
+          r.onerror = () => reject(new Error("read failed"));
+          r.readAsDataURL(file);
+        })
+    )
+  );
+}
+
 export default function CmEfilePage() {
   const router = useRouter();
   const [files, setFiles] = useState<FileRow[]>([]);
@@ -55,6 +76,7 @@ export default function CmEfilePage() {
   const [type, setType] = useState("GENERAL");
   const [subject, setSubject] = useState("");
   const [minute, setMinute] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [officerQ, setOfficerQ] = useState("");
@@ -110,6 +132,17 @@ export default function CmEfilePage() {
     );
   }
 
+  async function onPhotoFiles(fileList: FileList | null) {
+    try {
+      const urls = await filesToDataUrls(fileList);
+      if (urls.length) {
+        setPhotoUrls((prev) => [...prev, ...urls].slice(0, 6));
+      }
+    } catch {
+      setSubmitError("Could not read image");
+    }
+  }
+
   const filteredOfficers = officerQ.trim()
     ? officers.filter((o) => {
         const q = officerQ.trim().toLowerCase();
@@ -126,8 +159,8 @@ export default function CmEfilePage() {
     e.preventDefault();
     setSubmitError(null);
     setSubmitMsg(null);
-    if (!subject.trim()) {
-      setSubmitError("Subject is required");
+    if (type === "OTHERS" && !subject.trim()) {
+      setSubmitError("Please describe the file type for Others");
       return;
     }
     if (!selectedIds.length) {
@@ -140,10 +173,11 @@ export default function CmEfilePage() {
         method: "POST",
         body: JSON.stringify({
           type,
-          subject: subject.trim(),
+          subject: type === "OTHERS" ? subject.trim() : undefined,
           minute: minute.trim() || undefined,
           nextToUserIds: selectedIds,
           nextToUserId: selectedIds[0],
+          photoDataUrls: photoUrls,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -159,6 +193,7 @@ export default function CmEfilePage() {
       setSubject("");
       setMinute("");
       setType("GENERAL");
+      setPhotoUrls([]);
       setSelectedIds([]);
       setOfficerQ("");
       setShowForm(false);
@@ -202,7 +237,10 @@ export default function CmEfilePage() {
             <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={type}
-              onChange={(e) => setType(e.target.value)}
+              onChange={(e) => {
+                setType(e.target.value);
+                if (e.target.value !== "OTHERS") setSubject("");
+              }}
             >
               {TYPE_OPTS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -211,16 +249,22 @@ export default function CmEfilePage() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-xs font-semibold uppercase text-slate-500">Subject *</label>
-            <input
-              required
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder="Brief subject"
-            />
-          </div>
+
+          {type === "OTHERS" && (
+            <div>
+              <label className="text-xs font-semibold uppercase text-slate-500">
+                Describe type *
+              </label>
+              <input
+                required
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="What is this file about?"
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-semibold uppercase text-slate-500">Details</label>
             <textarea
@@ -230,6 +274,43 @@ export default function CmEfilePage() {
               onChange={(e) => setMinute(e.target.value)}
               placeholder="Optional note for the officer"
             />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold uppercase text-slate-500">
+              Pictures
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              className="mt-1 block w-full text-sm"
+              onChange={(e) => void onPhotoFiles(e.target.files)}
+            />
+            {photoUrls.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {photoUrls.map((u, i) => (
+                  <div key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={u}
+                      alt={`Attachment ${i + 1}`}
+                      className="h-16 w-16 rounded border border-slate-200 object-cover"
+                    />
+                    <button
+                      type="button"
+                      className="absolute -right-1 -top-1 rounded-full bg-slate-800 px-1 text-[10px] text-white"
+                      onClick={() =>
+                        setPhotoUrls((prev) => prev.filter((_, j) => j !== i))
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-1 text-[11px] text-slate-500">Up to 6 images</p>
           </div>
 
           <div>
@@ -339,6 +420,20 @@ export default function CmEfilePage() {
               {f.latestMinute?.body && (
                 <p className="mt-2 line-clamp-2 text-xs text-slate-600">{f.latestMinute.body}</p>
               )}
+              {f.latestMinute?.attachmentUrls &&
+                f.latestMinute.attachmentUrls.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {f.latestMinute.attachmentUrls.map((url, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={i}
+                        src={url}
+                        alt=""
+                        className="h-12 w-12 rounded border border-slate-200 object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
               <p className="mt-2 text-[11px] text-slate-400">
                 {new Date(f.createdAt).toLocaleString()}
               </p>
