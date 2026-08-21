@@ -216,7 +216,7 @@ export function openExitLetterPrint(data: ExitLetterData) {
       ? `${window.location.origin}/nysc-logo.png`
       : "/nysc-logo.png");
   const html = buildExitLetterHtml({ ...data, logoUrl });
-  const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=900");
+  const w = window.open("", "_blank", "width=720,height=900");
   if (!w) return false;
   w.document.open();
   w.document.write(html);
