@@ -19,6 +19,26 @@ export async function GET(req: Request) {
       gender: true,
       photographUrl: true,
       portalPasswordHash: true,
+      institution: true,
+      course: true,
+      platoonCode: true,
+      campExitGrantedAt: true,
+      exitGround: true,
+      exitReason: true,
+      exitDestinationState: true,
+      exitDestinationLga: true,
+      expectedReturnAt: true,
+      exitRequests: {
+        orderBy: { initiatedAt: "desc" },
+        take: 3,
+        select: {
+          ground: true,
+          stage: true,
+          reasonDetail: true,
+          initiatedByName: true,
+          initiatedAt: true,
+        },
+      },
     },
   });
 
@@ -36,6 +56,16 @@ export async function GET(req: Request) {
       gender: pcm.gender,
       photographUrl: pcm.photographUrl,
       hasCustomPassword: Boolean(pcm.portalPasswordHash),
+      institution: pcm.institution,
+      course: pcm.course,
+      platoonCode: pcm.platoonCode,
+      campExitGrantedAt: pcm.campExitGrantedAt,
+      exitGround: pcm.exitGround,
+      exitReason: pcm.exitReason,
+      exitDestinationState: pcm.exitDestinationState,
+      exitDestinationLga: pcm.exitDestinationLga,
+      expectedReturnAt: pcm.expectedReturnAt,
+      exitRequests: pcm.exitRequests,
     },
   });
 }

@@ -1,4 +1,4 @@
-/** Official-style NYSC mark used site-wide (green circle + monogram). */
+/** Official NYSC crest — uses public asset or embedded fallback. */
 export function NyscLogo({
   size = 40,
   className = "",
@@ -7,27 +7,23 @@ export function NyscLogo({
   className?: string;
 }) {
   return (
-    <svg
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/nysc-logo.png"
       width={size}
       height={size}
-      viewBox="0 0 64 64"
-      className={className}
-      role="img"
-      aria-label="NYSC"
-    >
-      <circle cx="32" cy="32" r="30" fill="#006400" />
-      <circle cx="32" cy="32" r="26" fill="none" stroke="#FFD700" strokeWidth="2" />
-      <text
-        x="32"
-        y="38"
-        textAnchor="middle"
-        fontFamily="system-ui, sans-serif"
-        fontWeight="700"
-        fontSize="16"
-        fill="#FFFFFF"
-      >
-        NYSC
-      </text>
-    </svg>
+      alt="NYSC — Service and Humility"
+      className={`object-contain ${className}`}
+      onError={(e) => {
+        const el = e.currentTarget;
+        if (el.dataset.fallback) return;
+        el.dataset.fallback = "1";
+        el.src =
+          "data:image/svg+xml," +
+          encodeURIComponent(
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#000"/><circle cx="32" cy="32" r="26" fill="none" stroke="#C9A227" stroke-width="2"/><text x="32" y="38" text-anchor="middle" fill="#C9A227" font-size="12" font-weight="700" font-family="sans-serif">NYSC</text></svg>`
+          );
+      }}
+    />
   );
 }

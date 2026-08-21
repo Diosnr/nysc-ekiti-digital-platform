@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { clearCmToken, cmFetch, ensureCmSessionActive } from "@/lib/cm-api";
+import { openExitLetterPrint } from "@/lib/exit-letter";
 
 type Pcm = {
   id: string;
@@ -11,6 +12,22 @@ type Pcm = {
   fullName: string;
   stateCode: string | null;
   photographUrl?: string | null;
+  institution?: string | null;
+  course?: string | null;
+  platoonCode?: string | null;
+  campExitGrantedAt?: string | null;
+  exitGround?: string | null;
+  exitReason?: string | null;
+  exitDestinationState?: string | null;
+  exitDestinationLga?: string | null;
+  expectedReturnAt?: string | null;
+  exitRequests?: Array<{
+    ground: string;
+    stage: string;
+    reasonDetail?: string | null;
+    initiatedByName: string;
+    initiatedAt: string;
+  }>;
 };
 
 const ITEMS = [
@@ -59,6 +76,27 @@ export default function CampPortalDashboard() {
       .finally(() => setLoading(false));
   }, [router]);
 
+  function downloadExitLetter() {
+    if (!pcm?.campExitGrantedAt) return;
+    const approved =
+      pcm.exitRequests?.find((r) => r.stage === "APPROVED") || pcm.exitRequests?.[0];
+    openExitLetterPrint({
+      fullName: pcm.fullName,
+      callUpNumber: pcm.callUpNumber,
+      stateCode: pcm.stateCode,
+      institution: pcm.institution,
+      course: pcm.course,
+      platoonCode: pcm.platoonCode,
+      exitGround: pcm.exitGround || approved?.ground,
+      exitReason: pcm.exitReason || approved?.reasonDetail,
+      exitDestinationState: pcm.exitDestinationState,
+      exitDestinationLga: pcm.exitDestinationLga,
+      expectedReturnAt: pcm.expectedReturnAt,
+      approvedAt: pcm.campExitGrantedAt,
+      approvedByName: approved?.initiatedByName,
+    });
+  }
+
   if (loading) {
     return (
       <main className="mx-auto max-w-xl px-4 py-16 text-center text-sm text-slate-500">
@@ -93,6 +131,23 @@ export default function CampPortalDashboard() {
           </p>
         </div>
       </div>
+
+      {pcm.campExitGrantedAt && (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <p className="text-sm font-semibold text-amber-900">Camp exit approved</p>
+          <p className="mt-1 text-xs text-amber-800">
+            Granted {new Date(pcm.campExitGrantedAt).toLocaleString()}. Download your official
+            exit letter (print or save as PDF).
+          </p>
+          <button
+            type="button"
+            onClick={downloadExitLetter}
+            className="mt-3 rounded-md bg-nysc-green px-3 py-2 text-xs font-semibold text-white hover:bg-nysc-green-light"
+          >
+            Download exit letter (PDF)
+          </button>
+        </div>
+      )}
 
       <div className="mt-8 space-y-3">
         {ITEMS.map((item) => (
