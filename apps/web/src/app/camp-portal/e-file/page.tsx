@@ -30,6 +30,7 @@ type Officer = {
 };
 
 const TYPE_OPTS = [
+  { value: "CAMP_EXIT", label: "Camp exit" },
   { value: "GENERAL", label: "General" },
   { value: "LEAVE", label: "Leave" },
   { value: "SICK_LEAVE", label: "Sick leave" },
@@ -40,6 +41,13 @@ const TYPE_OPTS = [
   { value: "REPOSTING", label: "Reposting" },
   { value: "QUERY", label: "Query / response" },
   { value: "OTHERS", label: "Others" },
+];
+
+const EXIT_GROUNDS = [
+  { value: "MARITAL", label: "Marital grounds" },
+  { value: "MEDICAL", label: "Medical grounds" },
+  { value: "TERRORISM", label: "Security / terrorism grounds" },
+  { value: "OTHER", label: "Other (explain in details)" },
 ];
 
 function statusStyle(status: string) {
@@ -74,6 +82,7 @@ export default function CmEfilePage() {
 
   const [showForm, setShowForm] = useState(false);
   const [type, setType] = useState("GENERAL");
+  const [ground, setGround] = useState("");
   const [subject, setSubject] = useState("");
   const [minute, setMinute] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
@@ -163,6 +172,10 @@ export default function CmEfilePage() {
       setSubmitError("Please describe the file type for Others");
       return;
     }
+    if (type === "CAMP_EXIT" && !ground && !minute.trim()) {
+      setSubmitError("Select an exit ground or explain the reason in Details");
+      return;
+    }
     if (!selectedIds.length) {
       setSubmitError("Select at least one officer to send this file to");
       return;
@@ -173,7 +186,11 @@ export default function CmEfilePage() {
         method: "POST",
         body: JSON.stringify({
           type,
-          subject: type === "OTHERS" ? subject.trim() : undefined,
+          ground: type === "CAMP_EXIT" ? ground || undefined : undefined,
+          subject:
+            type === "OTHERS" || type === "CAMP_EXIT"
+              ? subject.trim() || undefined
+              : undefined,
           minute: minute.trim() || undefined,
           nextToUserIds: selectedIds,
           nextToUserId: selectedIds[0],
@@ -186,12 +203,14 @@ export default function CmEfilePage() {
         return;
       }
       setSubmitMsg(
-        data.file?.currentHolderName
-          ? `File sent to ${data.file.currentHolderName}.`
-          : "File opened successfully."
+        data.message ||
+          (data.file?.currentHolderName
+            ? `File sent to ${data.file.currentHolderName}.`
+            : "File opened successfully.")
       );
       setSubject("");
       setMinute("");
+      setGround("");
       setType("GENERAL");
       setPhotoUrls([]);
       setSelectedIds([]);
@@ -239,7 +258,10 @@ export default function CmEfilePage() {
               value={type}
               onChange={(e) => {
                 setType(e.target.value);
-                if (e.target.value !== "OTHERS") setSubject("");
+                if (e.target.value !== "OTHERS" && e.target.value !== "CAMP_EXIT") {
+                  setSubject("");
+                }
+                if (e.target.value !== "CAMP_EXIT") setGround("");
               }}
             >
               {TYPE_OPTS.map((o) => (
@@ -250,17 +272,45 @@ export default function CmEfilePage() {
             </select>
           </div>
 
-          {type === "OTHERS" && (
+          {type === "CAMP_EXIT" && (
             <div>
               <label className="text-xs font-semibold uppercase text-slate-500">
-                Describe type *
+                Exit ground
+              </label>
+              <select
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={ground}
+                onChange={(e) => setGround(e.target.value)}
+              >
+                <option value="">Select ground…</option>
+                {EXIT_GROUNDS.map((g) => (
+                  <option key={g.value} value={g.value}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Send to your platoon officer (or the officer handling exits). This starts the
+                official camp exit workflow.
+              </p>
+            </div>
+          )}
+
+          {(type === "OTHERS" || type === "CAMP_EXIT") && (
+            <div>
+              <label className="text-xs font-semibold uppercase text-slate-500">
+                {type === "CAMP_EXIT" ? "Subject (optional)" : "Describe type *"}
               </label>
               <input
-                required
+                required={type === "OTHERS"}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="What is this file about?"
+                placeholder={
+                  type === "CAMP_EXIT"
+                    ? "e.g. Temporary release for medical appointment"
+                    : "What is this file about?"
+                }
               />
             </div>
           )}
@@ -272,7 +322,11 @@ export default function CmEfilePage() {
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={minute}
               onChange={(e) => setMinute(e.target.value)}
-              placeholder="Optional note for the officer"
+              placeholder={
+                type === "CAMP_EXIT"
+                  ? "Explain your request (required if no ground selected)"
+                  : "Optional note for the officer"
+              }
             />
           </div>
 
@@ -369,7 +423,11 @@ export default function CmEfilePage() {
             disabled={submitting}
             className="w-full rounded-md bg-nysc-green px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {submitting ? "Sending…" : "Send file"}
+            {submitting
+              ? "Sending…"
+              : type === "CAMP_EXIT"
+                ? "Submit camp exit request"
+                : "Send file"}
           </button>
         </form>
       )}

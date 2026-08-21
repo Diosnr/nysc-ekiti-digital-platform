@@ -2,8 +2,13 @@ import { prisma } from "@/lib/db";
 import { jsonOk, jsonError } from "@/lib/api";
 import { getCmBearerPayload } from "@/lib/cm-auth";
 import { uploadDataUriToCloudinary } from "@/lib/cloudinary";
+import {
+  firstStageAfterInitiation,
+  normalizeExitGroundCode,
+} from "@/lib/exit-workflow";
 
 const CM_FILE_TYPES = [
+  "CAMP_EXIT",
   "GENERAL",
   "LEAVE",
   "SICK_LEAVE",
@@ -17,6 +22,7 @@ const CM_FILE_TYPES = [
 ] as const;
 
 const TYPE_LABELS: Record<string, string> = {
+  CAMP_EXIT: "Camp exit",
   GENERAL: "General",
   LEAVE: "Leave",
   SICK_LEAVE: "Sick leave",
@@ -28,6 +34,12 @@ const TYPE_LABELS: Record<string, string> = {
   QUERY: "Query / response",
   OTHERS: "Others",
 };
+
+const PENDING_EXIT = [
+  "AWAITING_CLINIC",
+  "AWAITING_CAMP_DIRECTOR",
+  "AWAITING_STATE_COORDINATOR",
+] as const;
 
 /** List electronic files for the logged-in corps member only. */
 export async function GET(req: Request) {
@@ -90,7 +102,7 @@ export async function GET(req: Request) {
 
 /**
  * CM opens an e-file on their own record only.
- * Subject required only when type is OTHERS; otherwise derived from type label.
+ * CAMP_EXIT also opens a camp exit request in the staff workflow.
  */
 export async function POST(req: Request) {
   const payload = await getCmBearerPayload(req.headers.get("authorization"));
@@ -106,6 +118,7 @@ export async function POST(req: Request) {
       : "GENERAL";
     const otherSubject = String(body.subject ?? "").trim();
     const minute = body.minute ? String(body.minute).trim() : "";
+    const groundRaw = body.ground ? String(body.ground).trim().toUpperCase() : "";
 
     const nextToUserId = body.nextToUserId ? String(body.nextToUserId) : null;
     const nextToUserIds: string[] = Array.isArray(body.nextToUserIds)
@@ -123,6 +136,9 @@ export async function POST(req: Request) {
     if (type === "OTHERS" && !otherSubject) {
       return jsonError("Please describe the file type for Others");
     }
+    if (type === "CAMP_EXIT" && !groundRaw && !minute && !otherSubject) {
+      return jsonError("Select an exit ground or explain the reason in Details");
+    }
     if (!nextToUserIds.length) {
       return jsonError("Select at least one officer to send this file to");
     }
@@ -130,10 +146,27 @@ export async function POST(req: Request) {
     const pcmId = payload.sub;
     const pcm = await prisma.pcm.findUnique({
       where: { id: pcmId },
-      select: { id: true, fullName: true, callUpNumber: true },
+      select: {
+        id: true,
+        fullName: true,
+        callUpNumber: true,
+        status: true,
+      },
     });
     if (!pcm) {
       return jsonError("Session invalid", 401);
+    }
+
+    if (type === "CAMP_EXIT") {
+      if (pcm.status === "CHECKED_OUT" || pcm.status === "CAMP_EXITED") {
+        return jsonError("You have already exited camp", 400);
+      }
+      const openExit = await prisma.campExitRequest.findFirst({
+        where: { pcmId, stage: { in: [...PENDING_EXIT] } },
+      });
+      if (openExit) {
+        return jsonError("You already have an open camp exit request", 409);
+      }
     }
 
     const uniqueIds = [...new Set(nextToUserIds)];
@@ -169,7 +202,10 @@ export async function POST(req: Request) {
     const subject =
       type === "OTHERS"
         ? otherSubject
-        : TYPE_LABELS[type] || type;
+        : type === "CAMP_EXIT"
+          ? otherSubject ||
+            (groundRaw ? `Camp exit · ${groundRaw}` : "Camp exit request")
+          : TYPE_LABELS[type] || type;
 
     const photoUrls: string[] = [];
     for (let i = 0; i < Math.min(rawPhotos.length, 6); i++) {
@@ -186,11 +222,59 @@ export async function POST(req: Request) {
     }
 
     const openerName = payload.fullName || pcm.fullName;
+    let exitRequestId: string | null = null;
+
+    if (type === "CAMP_EXIT") {
+      const ground = groundRaw || "OTHER";
+      const canon = normalizeExitGroundCode(ground);
+      let requiresClinic: boolean | undefined;
+      try {
+        const opt = await prisma.exitGroundOption.findFirst({
+          where: {
+            OR: [{ code: ground }, { code: canon }],
+            isActive: true,
+          },
+        });
+        if (opt) requiresClinic = opt.requiresClinic;
+      } catch {
+        /* ignore */
+      }
+      if (requiresClinic === undefined) {
+        requiresClinic = canon === "MEDICAL";
+      }
+      const stage = firstStageAfterInitiation(ground, requiresClinic);
+      const groundForDb = canon || ground;
+
+      const exitRow = await prisma.campExitRequest.create({
+        data: {
+          pcmId,
+          ground: groundForDb,
+          reasonDetail: minute || otherSubject || `Camp exit requested by corps member`,
+          photoUrlsJson: photoUrls.length ? JSON.stringify(photoUrls) : null,
+          stage,
+          initiatedById: `cm:${pcmId}`,
+          initiatedByName: `${openerName} (corps member)`,
+          nextAssigneeId: primaryId,
+          nextAssigneeName: primaryName,
+        },
+      });
+      exitRequestId = exitRow.id;
+
+      await prisma.pcm.update({
+        where: { id: pcmId },
+        data: {
+          status: "CAMP_EXIT_REQUESTED",
+          exitGround: groundForDb,
+          exitReason: minute || otherSubject || groundForDb,
+        },
+      });
+    }
 
     const file = await prisma.electronicFile.create({
       data: {
         pcmId,
         type: type as
+          | "CAMP_EXIT"
           | "GENERAL"
           | "LEAVE"
           | "SICK_LEAVE"
@@ -202,8 +286,10 @@ export async function POST(req: Request) {
           | "QUERY"
           | "OTHERS",
         subject,
-        priority: "NORMAL",
+        priority: type === "CAMP_EXIT" ? "HIGH" : "NORMAL",
         status: "IN_TRANSIT",
+        groundCode: type === "CAMP_EXIT" ? groundRaw || "OTHER" : null,
+        exitRequestId,
         openedById: null,
         openedByName: openerName,
         currentHolderId: primaryId,
@@ -215,7 +301,11 @@ export async function POST(req: Request) {
             toUserId: primaryId,
             toName: primaryName,
             ccJson: ccList.length ? JSON.stringify(ccList) : null,
-            body: minute || subject,
+            body:
+              minute ||
+              (type === "CAMP_EXIT"
+                ? `Camp exit requested by corps member${groundRaw ? ` (${groundRaw})` : ""}.`
+                : subject),
             action: "FORWARD",
             attachmentUrlsJson: photoUrls.length
               ? JSON.stringify(photoUrls)
@@ -230,10 +320,21 @@ export async function POST(req: Request) {
         status: true,
         currentHolderName: true,
         createdAt: true,
+        exitRequestId: true,
       },
     });
 
-    return jsonOk({ file }, 201);
+    return jsonOk(
+      {
+        file,
+        exitRequestId,
+        message:
+          type === "CAMP_EXIT"
+            ? "Camp exit request submitted and sent to the selected officer."
+            : undefined,
+      },
+      201
+    );
   } catch (e) {
     console.error("cm e-file create", e);
     return jsonError(e instanceof Error ? e.message : "Could not create file", 400);
