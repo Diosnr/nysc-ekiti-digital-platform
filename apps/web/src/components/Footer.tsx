@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NyscLogo } from "@/components/NyscLogo";
 
 export function Footer() {
   return (
@@ -6,7 +7,10 @@ export function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <p className="text-lg font-semibold text-white">NYSC Ekiti State</p>
+            <div className="flex items-center gap-2.5">
+              <NyscLogo size={36} />
+              <p className="text-lg font-semibold text-white">NYSC Ekiti State</p>
+            </div>
             <p className="mt-2 text-sm leading-relaxed">
               National Youth Service Corps — Ekiti State Secretariat. Serving the nation through
               structured national service.

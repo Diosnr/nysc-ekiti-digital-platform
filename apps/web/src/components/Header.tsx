@@ -8,6 +8,7 @@ import {
   clearCmToken,
   ensureCmSessionActive,
 } from "@/lib/cm-api";
+import { NyscLogo } from "@/components/NyscLogo";
 
 export function Header() {
   const pathname = usePathname() || "";
@@ -71,9 +72,7 @@ export function Header() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         {isCampPortal ? (
           <Link href={cmLoggedIn ? "/camp-portal" : "/camp-portal/login"} className="flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-nysc-green text-sm font-bold text-white">
-              NY
-            </span>
+            <NyscLogo size={40} />
             <div className="leading-tight">
               <div className="text-sm font-bold text-slate-900">NYSC Ekiti</div>
               <div className="text-xs text-slate-500">My Portal</div>
@@ -81,9 +80,7 @@ export function Header() {
           </Link>
         ) : (
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-nysc-green text-sm font-bold text-white">
-              NY
-            </span>
+            <NyscLogo size={40} />
             <div className="leading-tight">
               <div className="text-sm font-bold text-slate-900">NYSC Ekiti</div>
               <div className="text-xs text-slate-500">Digital Platform</div>

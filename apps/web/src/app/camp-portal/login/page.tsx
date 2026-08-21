@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setCmToken } from "@/lib/cm-api";
+import { PasswordField } from "@/components/PasswordField";
+import { NyscLogo } from "@/components/NyscLogo";
 
 export default function CmLoginPage() {
   const router = useRouter();
@@ -40,8 +42,8 @@ export default function CmLoginPage() {
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="mb-6 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-nysc-green text-sm font-bold text-white">
-            NY
+          <div className="mx-auto flex justify-center">
+            <NyscLogo size={48} />
           </div>
           <h1 className="mt-3 text-xl font-bold text-slate-900">My Portal</h1>
           <p className="mt-1 text-sm text-slate-600">
@@ -70,20 +72,17 @@ export default function CmLoginPage() {
               onChange={(e) => setIdentifier(e.target.value)}
             />
           </div>
-          <div>
-            <label className="text-xs font-semibold uppercase text-slate-500">
-              Password (same as above)
-            </label>
-            <input
-              type="password"
-              required
-              autoComplete="current-password"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="Re-enter call-up or state code"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+          <PasswordField
+            id="cm-password"
+            label="Password (same as above)"
+            labelClassName="text-xs font-semibold uppercase text-slate-500"
+            required
+            autoComplete="current-password"
+            placeholder="Re-enter call-up or state code"
+            value={password}
+            onChange={setPassword}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 pr-10 text-sm"
+          />
           <button
             type="submit"
             disabled={loading}
