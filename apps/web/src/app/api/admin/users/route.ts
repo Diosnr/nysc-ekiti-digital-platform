@@ -22,6 +22,8 @@ export async function GET(req: Request) {
       zoneCode: true,
       platoonCode: true,
       isActive: true,
+      passwordHash: true,
+      activatedAt: true,
       lastLoginAt: true,
       createdAt: true,
       roles: { include: { role: true } },
@@ -29,10 +31,14 @@ export async function GET(req: Request) {
   });
 
   return jsonOk({
-    users: users.map((u) => ({
-      ...u,
-      roles: u.roles.map((r) => r.role.name),
-    })),
+    users: users.map((u) => {
+      const { passwordHash, ...rest } = u;
+      return {
+        ...rest,
+        hasPassword: Boolean(passwordHash),
+        roles: u.roles.map((r) => r.role.name),
+      };
+    }),
   });
 }
 
@@ -80,6 +86,7 @@ export async function POST(req: Request) {
       zoneCode: body.zoneCode ? String(body.zoneCode) : null,
       platoonCode: isPlatoonOfficerRole(roleNames) ? platoonCode : null,
       isActive: true,
+      activatedAt: passwordHash ? new Date() : null,
       roles: roleIds.length
         ? { create: roleIds.map((roleId) => ({ roleId, assignedBy: auth.payload.sub })) }
         : undefined,
@@ -122,6 +129,7 @@ export async function POST(req: Request) {
         email: user.email,
         name: user.name,
         platoonCode: user.platoonCode,
+        hasPassword: Boolean(passwordHash),
         roles: user.roles.map((r) => r.role.name),
       },
     },

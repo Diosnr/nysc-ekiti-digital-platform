@@ -29,9 +29,10 @@ export async function PATCH(req: Request, { params }: Params) {
 
   let platoonCode: string | null | undefined = undefined;
   if (body.platoonCode !== undefined) {
-    const raw = body.platoonCode === null || body.platoonCode === ""
-      ? null
-      : String(body.platoonCode).trim();
+    const raw =
+      body.platoonCode === null || body.platoonCode === ""
+        ? null
+        : String(body.platoonCode).trim();
     if (raw && !/^(10|[1-9])$/.test(raw)) {
       return jsonError("platoonCode must be 1–10");
     }
@@ -84,4 +85,49 @@ export async function PATCH(req: Request, { params }: Params) {
       roles: user!.roles.map((r) => r.role.name),
     },
   });
+}
+
+/** Permanently delete a user (Super Admin / user:deactivate). Cannot delete self. */
+export async function DELETE(req: Request, { params }: Params) {
+  const auth = await requireAuth(req, "user:deactivate");
+  if (auth instanceof Response) return auth;
+
+  const { id } = await params;
+  if (id === auth.payload.sub) {
+    return jsonError("You cannot delete your own account", 400);
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id },
+    include: { roles: { include: { role: true } } },
+  });
+  if (!existing) return jsonError("Not found", 404);
+
+  const isTargetSuper = existing.roles.some((r) => r.role.name === "Super Admin");
+  const actorIsSuper =
+    auth.payload.roles.includes("Super Admin") || auth.payload.permissions.includes("*");
+  if (isTargetSuper && !actorIsSuper) {
+    return jsonError("Only Super Admin can delete a Super Admin", 403);
+  }
+
+  await prisma.user.delete({ where: { id } });
+
+  const meta = clientMeta(req);
+  await writeAudit({
+    actorId: auth.payload.sub,
+    actorEmail: auth.payload.email,
+    actorRoleAtTime: auth.payload.roles.join(","),
+    action: "user.delete",
+    entityType: "User",
+    entityId: id,
+    before: {
+      email: existing.email,
+      name: existing.name,
+      roles: existing.roles.map((r) => r.role.name),
+    },
+    ip: meta.ip,
+    userAgent: meta.userAgent,
+  });
+
+  return jsonOk({ ok: true, deletedId: id, email: existing.email });
 }

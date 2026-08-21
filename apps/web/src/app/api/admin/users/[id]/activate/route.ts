@@ -9,14 +9,12 @@ function appBaseUrl(req: Request): string {
   const fromEnv = process.env.APP_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, "");
 
-  // Vercel provides this without protocol
   const vercel = process.env.VERCEL_URL?.trim();
   if (vercel) {
     const host = vercel.replace(/^https?:\/\//, "");
     return `https://${host}`;
   }
 
-  // Request origin (works when API is hit on production domain)
   try {
     const origin = new URL(req.url).origin;
     if (origin && !origin.includes("localhost")) return origin;
@@ -34,6 +32,7 @@ function appBaseUrl(req: Request): string {
   return "http://localhost:3000";
 }
 
+/** Issue activation link (first-time) or reset link (password already set). */
 export async function POST(req: Request, { params }: Params) {
   const auth = await requireAuth(req, "user:update");
   if (auth instanceof Response) return auth;
@@ -42,6 +41,7 @@ export async function POST(req: Request, { params }: Params) {
   const user = await prisma.user.findUnique({ where: { id } });
   if (!user) return jsonError("User not found", 404);
 
+  const hasPassword = Boolean(user.passwordHash);
   const token = randomBytes(32).toString("hex");
   await prisma.user.update({
     where: { id },
@@ -52,26 +52,35 @@ export async function POST(req: Request, { params }: Params) {
   });
 
   const base = appBaseUrl(req);
-  const activationUrl = `${base}/staff/activate?token=${token}`;
+  const linkUrl = `${base}/staff/activate?token=${token}`;
 
   const meta = clientMeta(req);
   await writeAudit({
     actorId: auth.payload.sub,
     actorEmail: auth.payload.email,
     actorRoleAtTime: auth.payload.roles.join(","),
-    action: "user.activation.issue",
+    action: hasPassword ? "user.reset.issue" : "user.activation.issue",
     entityType: "User",
     entityId: id,
-    after: { email: user.email, base, sentAt: new Date().toISOString() },
+    after: {
+      email: user.email,
+      mode: hasPassword ? "reset" : "activation",
+      base,
+      sentAt: new Date().toISOString(),
+    },
     ip: meta.ip,
     userAgent: meta.userAgent,
   });
 
   return jsonOk({
-    activationUrl,
+    mode: hasPassword ? "reset" : "activation",
+    activationUrl: linkUrl,
+    resetUrl: linkUrl,
+    url: linkUrl,
     email: user.email,
     phone: user.phone,
-    message:
-      "Send this link to the officer via email or WhatsApp. They will set their password and complete profile.",
+    message: hasPassword
+      ? "Send this reset link to the officer. They will set a new password."
+      : "Send this activation link to the officer via email or WhatsApp. They will set their password and complete profile.",
   });
 }
