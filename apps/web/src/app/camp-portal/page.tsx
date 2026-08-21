@@ -15,6 +15,7 @@ type Pcm = {
   institution?: string | null;
   course?: string | null;
   platoonCode?: string | null;
+  gender?: string | null;
   campExitGrantedAt?: string | null;
   exitGround?: string | null;
   exitReason?: string | null;
@@ -27,6 +28,7 @@ type Pcm = {
     reasonDetail?: string | null;
     initiatedByName: string;
     initiatedAt: string;
+    coordinatorByName?: string | null;
   }>;
 };
 
@@ -76,14 +78,15 @@ export default function CampPortalDashboard() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  function downloadExitLetter() {
+  async function downloadExitLetter() {
     if (!pcm?.campExitGrantedAt) return;
     const approved =
       pcm.exitRequests?.find((r) => r.stage === "APPROVED") || pcm.exitRequests?.[0];
-    openExitLetterPrint({
+    await openExitLetterPrint({
       fullName: pcm.fullName,
       callUpNumber: pcm.callUpNumber,
       stateCode: pcm.stateCode,
+      gender: pcm.gender,
       institution: pcm.institution,
       course: pcm.course,
       platoonCode: pcm.platoonCode,
@@ -93,7 +96,8 @@ export default function CampPortalDashboard() {
       exitDestinationLga: pcm.exitDestinationLga,
       expectedReturnAt: pcm.expectedReturnAt,
       approvedAt: pcm.campExitGrantedAt,
-      approvedByName: approved?.initiatedByName,
+      photographUrl: pcm.photographUrl,
+      signerName: approved?.coordinatorByName || undefined,
     });
   }
 
@@ -141,7 +145,7 @@ export default function CampPortalDashboard() {
           </p>
           <button
             type="button"
-            onClick={downloadExitLetter}
+            onClick={() => void downloadExitLetter()}
             className="mt-3 rounded-md bg-nysc-green px-3 py-2 text-xs font-semibold text-white hover:bg-nysc-green-light"
           >
             Download exit letter (PDF)

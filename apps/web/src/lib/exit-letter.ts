@@ -101,7 +101,6 @@ export function buildExitLetterHtml(data: ExitLetterData): string {
       )}" alt="Signature" />`
     : `<div class="sig-missing">Signature on file</div>`;
 
-  // Watermark grid: repeated logos at low opacity
   const watermarkCells = Array.from({ length: 24 })
     .map(
       () =>
@@ -159,7 +158,6 @@ export function buildExitLetterHtml(data: ExitLetterData): string {
       background: #fff;
     }
 
-    /* Multi-placement logo watermarks */
     .watermarks {
       position: absolute;
       inset: 0;
@@ -553,7 +551,8 @@ export type CoordinatorSigner = {
 
 /**
  * Open print window. Optionally pass photographUrl + signer fields.
- * If signature/signer missing, attempts to load from /api/letters/state-coordinator.
+ * If signature/signer missing, loads from /api/letters/state-coordinator
+ * using staff (nysc_access_token) or CM (nysc_cm_token) Bearer.
  */
 export async function openExitLetterPrint(
   data: ExitLetterData
@@ -570,14 +569,8 @@ export async function openExitLetterPrint(
     try {
       const headers: HeadersInit = {};
       if (typeof window !== "undefined") {
-        const staff =
-          localStorage.getItem("nysc_access_token") ||
-          localStorage.getItem("accessToken") ||
-          sessionStorage.getItem("nysc_access_token");
-        const cm =
-          localStorage.getItem("cm_token") ||
-          sessionStorage.getItem("cm_token") ||
-          localStorage.getItem("nysc_cm_token");
+        const staff = localStorage.getItem("nysc_access_token");
+        const cm = localStorage.getItem("nysc_cm_token");
         if (staff) headers.Authorization = `Bearer ${staff}`;
         else if (cm) headers.Authorization = `Bearer ${cm}`;
       }
@@ -586,9 +579,7 @@ export async function openExitLetterPrint(
         credentials: "include",
       });
       if (res.ok) {
-        const json = (await res.json()) as {
-          signer?: CoordinatorSigner;
-        };
+        const json = (await res.json()) as { signer?: CoordinatorSigner };
         const s = json.signer;
         if (s) {
           merged = {
@@ -601,14 +592,12 @@ export async function openExitLetterPrint(
               merged.signerTitle ||
               (s.post
                 ? s.post
-                : s.name
-                  ? "State Coordinator, NYSC Ekiti State"
-                  : merged.signerTitle),
+                : "State Coordinator, NYSC Ekiti State"),
           };
         }
       }
     } catch {
-      /* offline / no auth — still print without signature image */
+      /* still print without signature image */
     }
   }
 

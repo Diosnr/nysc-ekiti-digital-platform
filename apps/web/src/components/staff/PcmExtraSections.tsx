@@ -41,6 +41,7 @@ export type PcmDetailExtra = {
     clinicNote?: string | null;
     directorNote?: string | null;
     coordinatorNote?: string | null;
+    coordinatorByName?: string | null;
     rejectReason?: string | null;
   }>;
   electronicFiles?: Array<{
@@ -241,10 +242,10 @@ function downloadProfile(detail: PcmDetailExtra) {
   URL.revokeObjectURL(url);
 }
 
-function downloadExitLetter(detail: PcmDetailExtra) {
+async function downloadExitLetter(detail: PcmDetailExtra) {
   const approved =
     detail.exitRequests?.find((r) => r.stage === "APPROVED") || detail.exitRequests?.[0];
-  openExitLetterPrint({
+  await openExitLetterPrint({
     fullName: detail.fullName || "",
     callUpNumber: detail.callUpNumber || "",
     stateCode: detail.stateCode,
@@ -258,7 +259,8 @@ function downloadExitLetter(detail: PcmDetailExtra) {
     exitDestinationLga: detail.exitDestinationLga,
     expectedReturnAt: detail.expectedReturnAt,
     approvedAt: detail.campExitGrantedAt || undefined,
-    approvedByName: approved?.initiatedByName,
+    photographUrl: detail.photographUrl,
+    signerName: approved?.coordinatorByName || undefined,
   });
 }
 
@@ -284,7 +286,7 @@ export function PcmExtraSections({
         {canDownloadExitLetter && (
           <button
             type="button"
-            onClick={() => downloadExitLetter(detail)}
+            onClick={() => void downloadExitLetter(detail)}
             className="rounded-md border border-nysc-green bg-green-50 px-3 py-1.5 text-xs font-semibold text-nysc-green hover:bg-green-100"
           >
             Download exit letter (PDF)
