@@ -15,6 +15,8 @@ export type ExitLetterData = {
   expectedReturnAt?: string | null;
   approvedAt?: string | null;
   approvedByName?: string | null;
+  /** Absolute URL to NYSC crest (optional; defaults to site /nysc-logo.png). */
+  logoUrl?: string | null;
 };
 
 function esc(s: string) {
@@ -44,6 +46,11 @@ export function buildExitLetterHtml(data: ExitLetterData): string {
         new Date(data.expectedReturnAt).toLocaleDateString("en-GB")
       )}</p>`
     : "";
+
+  const logo =
+    data.logoUrl && data.logoUrl.length > 0
+      ? `<img src="${esc(data.logoUrl)}" alt="NYSC" width="64" height="64" style="display:block;margin:0 auto 8px;object-fit:contain" />`
+      : `<div class="logo">NYSC</div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -76,15 +83,15 @@ export function buildExitLetterHtml(data: ExitLetterData): string {
       margin-bottom: 12px;
     }
     .logo {
-      width: 48px;
-      height: 48px;
+      width: 56px;
+      height: 56px;
       margin: 0 auto 6px;
       border-radius: 50%;
-      background: #006400;
-      color: #fff;
+      background: #000;
+      color: #C9A227;
       font-weight: 700;
       font-size: 11px;
-      line-height: 48px;
+      line-height: 56px;
       letter-spacing: 0.5px;
     }
     .org { font-size: 13pt; font-weight: 700; color: #006400; text-transform: uppercase; }
@@ -149,7 +156,7 @@ export function buildExitLetterHtml(data: ExitLetterData): string {
   </div>
   <div class="sheet">
     <div class="header">
-      <div class="logo">NYSC</div>
+      ${logo}
       <div class="org">National Youth Service Corps</div>
       <div class="sub">Ekiti State Secretariat</div>
       <div class="sub">Kilometer 2, Iyin Road, Ado-Ekiti, Ekiti State</div>
@@ -203,7 +210,12 @@ export function buildExitLetterHtml(data: ExitLetterData): string {
 }
 
 export function openExitLetterPrint(data: ExitLetterData) {
-  const html = buildExitLetterHtml(data);
+  const logoUrl =
+    data.logoUrl ||
+    (typeof window !== "undefined"
+      ? `${window.location.origin}/nysc-logo.png`
+      : "/nysc-logo.png");
+  const html = buildExitLetterHtml({ ...data, logoUrl });
   const w = window.open("", "_blank", "noopener,noreferrer,width=720,height=900");
   if (!w) return false;
   w.document.open();
