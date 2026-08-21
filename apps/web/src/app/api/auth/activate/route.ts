@@ -3,7 +3,42 @@ import { hashPassword } from "@/lib/auth-server";
 import { writeAudit } from "@/lib/audit";
 import { jsonOk, jsonError, clientMeta } from "@/lib/api";
 
-/** Complete officer activation: token + new password (+ optional profile fields). */
+/** Peek token: activation vs reset (has password already). */
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const token = String(url.searchParams.get("token") ?? "").trim();
+    if (!token) return jsonError("token required");
+
+    const user = await prisma.user.findFirst({
+      where: { activationToken: token, isActive: true },
+      select: {
+        email: true,
+        passwordHash: true,
+        activationSentAt: true,
+      },
+    });
+    if (!user) return jsonError("Invalid or expired link", 400);
+
+    if (user.activationSentAt) {
+      const age = Date.now() - user.activationSentAt.getTime();
+      if (age > 7 * 24 * 60 * 60 * 1000) {
+        return jsonError("Link has expired. Ask admin to issue a new one.", 400);
+      }
+    }
+
+    const hasPassword = Boolean(user.passwordHash);
+    return jsonOk({
+      email: user.email,
+      mode: hasPassword ? "reset" : "activation",
+    });
+  } catch (e) {
+    console.error("activate GET error", e);
+    return jsonError("Failed", 500);
+  }
+}
+
+/** Complete officer activation or password reset: token + new password. */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -19,16 +54,16 @@ export async function POST(req: Request) {
     const user = await prisma.user.findFirst({
       where: { activationToken: token, isActive: true },
     });
-    if (!user) return jsonError("Invalid or expired activation link", 400);
+    if (!user) return jsonError("Invalid or expired link", 400);
 
-    // Optional expiry: 7 days from activationSentAt
     if (user.activationSentAt) {
       const age = Date.now() - user.activationSentAt.getTime();
       if (age > 7 * 24 * 60 * 60 * 1000) {
-        return jsonError("Activation link has expired. Ask admin to issue a new one.", 400);
+        return jsonError("Link has expired. Ask admin to issue a new one.", 400);
       }
     }
 
+    const wasReset = Boolean(user.passwordHash);
     const passwordHash = await hashPassword(password);
     await prisma.user.update({
       where: { id: user.id },
@@ -37,7 +72,7 @@ export async function POST(req: Request) {
         name: name ?? user.name,
         phone: phone ?? user.phone,
         activationToken: null,
-        activatedAt: new Date(),
+        activatedAt: user.activatedAt ?? new Date(),
       },
     });
 
@@ -45,7 +80,7 @@ export async function POST(req: Request) {
     await writeAudit({
       actorId: user.id,
       actorEmail: user.email,
-      action: "user.activation.complete",
+      action: wasReset ? "user.password.reset" : "user.activation.complete",
       entityType: "User",
       entityId: user.id,
       ip: meta.ip,
@@ -55,7 +90,10 @@ export async function POST(req: Request) {
     return jsonOk({
       ok: true,
       email: user.email,
-      message: "Account activated. You can sign in with your new password.",
+      mode: wasReset ? "reset" : "activation",
+      message: wasReset
+        ? "Password updated. You can sign in with your new password."
+        : "Account activated. You can sign in with your new password.",
     });
   } catch (e) {
     console.error("activate error", e);

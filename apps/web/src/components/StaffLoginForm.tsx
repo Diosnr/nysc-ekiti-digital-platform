@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PasswordField } from "@/components/PasswordField";
 
 const STORAGE_ACCESS = "nysc_access_token";
 const STORAGE_REFRESH = "nysc_refresh_token";
@@ -61,21 +62,15 @@ export function StaffLoginForm() {
           placeholder="you@example.com"
         />
       </div>
-      <div>
-        <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-          Password
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-nysc-green focus:outline-none focus:ring-1 focus:ring-nysc-green"
-        />
-      </div>
+      <PasswordField
+        id="password"
+        name="password"
+        label="Password"
+        required
+        autoComplete="current-password"
+        value={password}
+        onChange={setPassword}
+      />
       <button
         type="submit"
         disabled={loading}
