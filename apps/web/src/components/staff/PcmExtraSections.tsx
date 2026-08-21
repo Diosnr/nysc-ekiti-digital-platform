@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { openExitLetterPrint } from "@/lib/exit-letter";
 
 export type PcmDetailExtra = {
   id: string;
@@ -21,6 +22,7 @@ export type PcmDetailExtra = {
   batchYear?: string | null;
   ppaName?: string | null;
   campExitGrantedAt?: string | null;
+  exitGround?: string | null;
   exitReason?: string | null;
   exitDestinationState?: string | null;
   exitDestinationLga?: string | null;
@@ -239,6 +241,27 @@ function downloadProfile(detail: PcmDetailExtra) {
   URL.revokeObjectURL(url);
 }
 
+function downloadExitLetter(detail: PcmDetailExtra) {
+  const approved =
+    detail.exitRequests?.find((r) => r.stage === "APPROVED") || detail.exitRequests?.[0];
+  openExitLetterPrint({
+    fullName: detail.fullName || "",
+    callUpNumber: detail.callUpNumber || "",
+    stateCode: detail.stateCode,
+    gender: detail.gender,
+    institution: detail.institution,
+    course: detail.course,
+    platoonCode: detail.platoonCode,
+    exitGround: detail.exitGround || approved?.ground,
+    exitReason: detail.exitReason || approved?.reasonDetail,
+    exitDestinationState: detail.exitDestinationState,
+    exitDestinationLga: detail.exitDestinationLga,
+    expectedReturnAt: detail.expectedReturnAt,
+    approvedAt: detail.campExitGrantedAt || undefined,
+    approvedByName: approved?.initiatedByName,
+  });
+}
+
 export function PcmExtraSections({
   detail,
   showFullRecordLink = true,
@@ -246,6 +269,8 @@ export function PcmExtraSections({
   detail: PcmDetailExtra;
   showFullRecordLink?: boolean;
 }) {
+  const canDownloadExitLetter = Boolean(detail.campExitGrantedAt);
+
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -256,6 +281,15 @@ export function PcmExtraSections({
         >
           Download profile
         </button>
+        {canDownloadExitLetter && (
+          <button
+            type="button"
+            onClick={() => downloadExitLetter(detail)}
+            className="rounded-md border border-nysc-green bg-green-50 px-3 py-1.5 text-xs font-semibold text-nysc-green hover:bg-green-100"
+          >
+            Download exit letter (PDF)
+          </button>
+        )}
       </div>
 
       {(detail.campExitGrantedAt ||
