@@ -14,6 +14,7 @@ type UserRow = {
   zoneCode: string | null;
   platoonCode: string | null;
   isActive: boolean;
+  hasPassword?: boolean;
   roles: string[];
 };
 
@@ -34,6 +35,7 @@ export default function AdminUsersPage() {
   const [open, setOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editPlatoon, setEditPlatoon] = useState("");
+  const [canDelete, setCanDelete] = useState(false);
   const [form, setForm] = useState({
     email: "",
     name: "",
@@ -52,9 +54,10 @@ export default function AdminUsersPage() {
   const needsPlatoon = selectedRoleNames.some(isPlatoonRoleName);
 
   async function load() {
-    const [uRes, rRes] = await Promise.all([
+    const [uRes, rRes, meRes] = await Promise.all([
       staffFetch("/api/admin/users"),
       staffFetch("/api/admin/roles"),
+      staffFetch("/api/auth/me"),
     ]);
     if (uRes.ok) {
       const data = await uRes.json();
@@ -63,6 +66,16 @@ export default function AdminUsersPage() {
     if (rRes.ok) {
       const data = await rRes.json();
       setRoles(data.roles.map((r: { id: string; name: string }) => ({ id: r.id, name: r.name })));
+    }
+    if (meRes.ok) {
+      const me = await meRes.json();
+      const perms: string[] = me.permissions ?? [];
+      const roleNames: string[] = me.roles ?? [];
+      setCanDelete(
+        perms.includes("*") ||
+          perms.includes("user:deactivate") ||
+          roleNames.includes("Super Admin")
+      );
     }
   }
 
@@ -134,22 +147,44 @@ export default function AdminUsersPage() {
     load();
   }
 
-  async function issueActivation(userId: string, email: string) {
+  async function issueLink(userId: string, email: string, hasPassword: boolean) {
     setError(null);
     setMsg(null);
     const res = await staffFetch(`/api/admin/users/${userId}/activate`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) {
-      setError(data.error ?? "Could not issue activation link");
+      setError(data.error ?? "Could not issue link");
       return;
     }
-    setMsg(`Activation link for ${email}: ${data.activationUrl}`);
+    const url = data.url || data.resetUrl || data.activationUrl;
+    const label = hasPassword || data.mode === "reset" ? "Reset link" : "Activation link";
+    setMsg(`${label} for ${email}: ${url}`);
     try {
-      await navigator.clipboard.writeText(data.activationUrl);
+      await navigator.clipboard.writeText(url);
       setMsg((m) => `${m} (copied to clipboard)`);
     } catch {
       /* ignore */
     }
+  }
+
+  async function deleteUser(u: UserRow) {
+    if (
+      !confirm(
+        `Delete user permanently?\n\n${u.email}\n${u.name || ""}\n\nThis cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setMsg(null);
+    const res = await staffFetch(`/api/admin/users/${u.id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "Delete failed");
+      return;
+    }
+    setMsg(`Deleted ${u.email}`);
+    load();
   }
 
   function toggleRole(id: string) {
@@ -167,7 +202,8 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Users / Officers</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Platoon Officers require a platoon number (1–10). Rotations are recorded for audit.
+            Platoon Officers require a platoon number (1–10). After a password is set, links become
+            reset links.
           </p>
         </div>
         <button
@@ -309,6 +345,7 @@ export default function AdminUsersPage() {
           <tbody>
             {users.map((u) => {
               const isPlatoon = u.roles.some(isPlatoonRoleName);
+              const hasPw = Boolean(u.hasPassword);
               return (
                 <tr key={u.id} className="border-b border-slate-100">
                   <td className="px-4 py-3 font-medium text-slate-900">{u.email}</td>
@@ -333,14 +370,19 @@ export default function AdminUsersPage() {
                     >
                       {u.isActive ? "Active" : "Inactive"}
                     </span>
+                    {hasPw ? (
+                      <span className="ml-1 text-[10px] text-slate-400">password set</span>
+                    ) : (
+                      <span className="ml-1 text-[10px] text-amber-600">no password</span>
+                    )}
                   </td>
-                  <td className="px-4 py-3 space-x-2">
+                  <td className="px-4 py-3 space-x-2 whitespace-nowrap">
                     <button
                       type="button"
-                      onClick={() => issueActivation(u.id, u.email)}
+                      onClick={() => void issueLink(u.id, u.email, hasPw)}
                       className="text-xs font-medium text-nysc-green hover:underline"
                     >
-                      Activation link
+                      {hasPw ? "Reset link" : "Activation link"}
                     </button>
                     {isPlatoon && (
                       <>
@@ -385,6 +427,15 @@ export default function AdminUsersPage() {
                           </button>
                         )}
                       </>
+                    )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => void deleteUser(u)}
+                        className="text-xs font-medium text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
                     )}
                   </td>
                 </tr>
